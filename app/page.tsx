@@ -92,7 +92,7 @@ export default function HomePage() {
   }, []);
 
   const loadData = () => {
-    const allTopics = storage.getTopics();
+    const allTopics = JSON.parse(localStorage.getItem("topics"));
     const appStats = storage.getStats();
     setTopics(allTopics);
     setStats(appStats);

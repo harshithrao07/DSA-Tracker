@@ -50,14 +50,18 @@ export default function AddQuestionPage() {
   });
 
   useEffect(() => {
-    const allQuestions = storage.getQuestions() || [];
-    const topicsSet = new Set<string>();
-    allQuestions.forEach((q) => {
-      if (q.topics) {
-        q.topics.forEach((topic) => topicsSet.add(topic));
+    const storedTopics = localStorage.getItem("topics");
+    if (storedTopics) {
+      try {
+        const parsedTopics: string[] = JSON.parse(storedTopics);
+        setExistingTopics(parsedTopics.sort());
+      } catch (error) {
+        console.error("Failed to parse topics from localStorage", error);
+        setExistingTopics([]);
       }
-    });
-    setExistingTopics(Array.from(topicsSet).sort());
+    } else {
+      setExistingTopics([]);
+    }
   }, []);
 
   const handleAutoFetch = async () => {
@@ -128,7 +132,19 @@ export default function AddQuestionPage() {
 
   const handleAddTopic = () => {
     const topic = formData.newTopic.trim();
-    if (topic && !formData.topics.includes(topic)) {
+    if (!topic) return; // Prevent adding empty strings
+
+    // Get existing topics from localStorage (or use an empty array)
+    const storedTopics = JSON.parse(localStorage.getItem("topics") || "[]");
+
+    // Add to storage if it doesn't already exist
+    if (!storedTopics.includes(topic)) {
+      storedTopics.push(topic);
+      localStorage.setItem("topics", JSON.stringify(storedTopics));
+    }
+
+    // Add to current formData if not already present
+    if (!formData.topics.includes(topic)) {
       setFormData((prev) => ({
         ...prev,
         topics: [...prev.topics, topic],
@@ -201,6 +217,16 @@ export default function AddQuestionPage() {
         difficulty: formData.difficulty,
         link: formData.link.trim() || undefined,
       });
+
+      const storedTopics = JSON.parse(localStorage.getItem("topics") || "[]");
+
+      formData.topics.forEach((topic) => {
+        if (!storedTopics.includes(topic)) {
+          storedTopics.push(topic);
+        }
+      });
+
+      localStorage.setItem("topics", JSON.stringify(storedTopics));
 
       toast({
         title: "Question added successfully!",
@@ -341,7 +367,7 @@ export default function AddQuestionPage() {
                   {/* Add New Topic Input */}
                   <div className="space-y-2">
                     <Label className="text-sm text-muted-foreground">
-                      Or add new topic:
+                      Add new topic:
                     </Label>
                     <div className="flex gap-2">
                       <Input
