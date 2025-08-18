@@ -40,6 +40,7 @@ export default function AddQuestionPage() {
   const [isAutoFetching, setIsAutoFetching] = useState(false);
   const [existingTopics, setExistingTopics] = useState<string[]>([]);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const [selectedExistingTopic, setSelectedExistingTopic] = useState("");
 
   const [formData, setFormData] = useState({
     title: "",
@@ -266,6 +267,8 @@ export default function AddQuestionPage() {
         topics: [...prev.topics, topic],
       }));
     }
+
+    setSelectedExistingTopic("");
   };
 
   return (
@@ -349,7 +352,10 @@ export default function AddQuestionPage() {
                       <Label className="text-sm text-muted-foreground">
                         Select from existing topics:
                       </Label>
-                      <Select onValueChange={handleSelectExistingTopic}>
+                      <Select
+                        value={selectedExistingTopic}
+                        onValueChange={handleSelectExistingTopic}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Choose existing topic" />
                         </SelectTrigger>
