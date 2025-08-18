@@ -1,0 +1,213 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: rgba(255, 255, 255, 0.8);
+  --card-foreground: #000000;
+  --popover: rgba(255, 255, 255, 0.9);
+  --popover-foreground: #000000;
+  /* Updated primary colors to Vercel blue theme */
+  --primary: #0070f3;
+  --primary-foreground: #ffffff;
+  --secondary: #666666;
+  --secondary-foreground: #ffffff;
+  --muted: #fafafa;
+  --muted-foreground: #666666;
+  --accent: #0070f3;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #eaeaea;
+  --input: #fafafa;
+  --ring: rgba(0, 112, 243, 0.3);
+  --chart-1: #0070f3;
+  --chart-2: #7928ca;
+  --chart-3: #ff0080;
+  --chart-4: #ff6600;
+  --chart-5: #f81ce5;
+  --radius: 0.5rem;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #0070f3;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #666666;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #eaeaea;
+  --sidebar-ring: rgba(0, 112, 243, 0.3);
+}
+
+.dark {
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: rgba(17, 17, 17, 0.8);
+  --card-foreground: #ffffff;
+  --popover: rgba(17, 17, 17, 0.9);
+  --popover-foreground: #ffffff;
+  /* Updated dark mode colors to match Vercel's dark theme */
+  --primary: #0070f3;
+  --primary-foreground: #ffffff;
+  --secondary: #333333;
+  --secondary-foreground: #ffffff;
+  --muted: #111111;
+  --muted-foreground: #888888;
+  --accent: #0070f3;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #333333;
+  --input: #111111;
+  --ring: rgba(0, 112, 243, 0.4);
+  --chart-1: #0070f3;
+  --chart-2: #7928ca;
+  --chart-3: #ff0080;
+  --chart-4: #ff6600;
+  --chart-5: #f81ce5;
+  --radius: 0.5rem;
+  --sidebar: #111111;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #0070f3;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #333333;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #333333;
+  --sidebar-ring: rgba(0, 112, 243, 0.4);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Updated futuristic glow effects and animations */
+@layer utilities {
+  .glow-primary {
+    box-shadow: 0 0 20px rgba(0, 112, 243, 0.3);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 15px rgba(0, 112, 243, 0.4);
+  }
+
+  /* Enhanced gradient utilities with multiple color combinations */
+  .gradient-primary {
+    background: linear-gradient(135deg, #0070f3, #7928ca);
+  }
+
+  .gradient-secondary {
+    background: linear-gradient(135deg, #7928ca, #ff0080);
+  }
+
+  .gradient-accent {
+    background: linear-gradient(135deg, #0070f3, #00d4ff);
+  }
+
+  .gradient-card {
+    background: linear-gradient(135deg, rgba(0, 112, 243, 0.1), rgba(121, 40, 202, 0.05));
+  }
+
+  .gradient-border {
+    background: linear-gradient(135deg, #0070f3, #7928ca);
+    padding: 1px;
+  }
+
+  .gradient-text-primary {
+    background: linear-gradient(135deg, #0070f3, #7928ca);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-accent {
+    background: linear-gradient(135deg, #7928ca, #ff0080);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-hover {
+    background: linear-gradient(135deg, #0070f3, #7928ca);
+    background-size: 200% 200%;
+    transition: background-position 0.3s ease;
+  }
+
+  .gradient-hover:hover {
+    background-position: 100% 100%;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite alternate;
+  }
+
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+  }
+
+  @keyframes pulse-glow {
+    from {
+      box-shadow: 0 0 20px rgba(0, 112, 243, 0.3);
+    }
+    to {
+      box-shadow: 0 0 30px rgba(0, 112, 243, 0.6);
+    }
+  }
+
+  @keyframes gradient-shift {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+}
