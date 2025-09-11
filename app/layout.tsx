@@ -1,20 +1,20 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { GeistSans } from "geist/font/sans"
-import { GeistMono } from "geist/font/mono"
-import "./globals.css"
-import { Toaster } from "@/components/ui/toaster"
+import type React from "react";
+import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+import { UserProvider } from "@/context/UserContext";
 
 export const metadata: Metadata = {
-  title: "DSA Question Picker",
+  title: "DSA Tracker",
   description: "Your personal DSA practice companion",
-  generator: "v0.app",
-}
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
     <html lang="en" className="dark">
@@ -27,7 +27,10 @@ html {
 }
         `}</style>
       </head>
-      <body className="min-h-screen bg-background text-foreground">{children}<Toaster /></body>
+      <body className="min-h-screen bg-background text-foreground">
+        <UserProvider>{children}</UserProvider>
+        <Toaster />
+      </body>
     </html>
-  )
+  );
 }

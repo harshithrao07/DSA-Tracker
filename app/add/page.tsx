@@ -22,47 +22,64 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Navigation } from "@/components/navigation";
-import { storage } from "@/lib/storage";
 import { Plus, LinkIcon, Download, Loader2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import {
-  autoFetchProblemDetails,
-  detectPlatform,
-  platforms,
-} from "@/lib/auto-fetch";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import axios from "axios";
+import { QuestionAutofillResponse, QuestionResponse } from "@/types/question";
+import { ApiResponse } from "@/types/response";
+import { Topic } from "@/types/topic";
+import dynamic from "next/dynamic";
+
+const MDEditor = dynamic(() => import("@uiw/react-md-editor"), { ssr: false });
 
 export default function AddQuestionPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoFetching, setIsAutoFetching] = useState(false);
-  const [existingTopics, setExistingTopics] = useState<string[]>([]);
+  const [existingTopics, setExistingTopics] = useState<Topic[]>([]);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const [selectedExistingTopic, setSelectedExistingTopic] = useState("");
+  const [platformName, setPlatformName] = useState<string>("");
 
   const [formData, setFormData] = useState({
     title: "",
     topics: [] as string[],
     newTopic: "",
-    difficulty: "" as "Easy" | "Medium" | "Hard" | "",
+    difficulty: "" as "EASY" | "MEDIUM" | "HARD" | "",
     link: "",
+    reviseLater: false,
+    notes: "",
   });
 
   useEffect(() => {
-    const storedTopics = localStorage.getItem("topics");
-    if (storedTopics) {
+    async function fetchTopics() {
       try {
-        const parsedTopics: string[] = JSON.parse(storedTopics);
-        setExistingTopics(parsedTopics.sort());
+        const result = await axios.get<ApiResponse<Topic[]>>(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/topics`,
+          {
+            withCredentials: true,
+          }
+        );
+
+        if (!result.data.success) {
+          console.error(
+            "Error in fetching all topics from server: ",
+            result.data.errorMessage
+          );
+          return;
+        }
+
+        setExistingTopics(result.data.data);
       } catch (error) {
         console.error("Failed to parse topics from localStorage", error);
         setExistingTopics([]);
       }
-    } else {
-      setExistingTopics([]);
     }
+
+    fetchTopics();
   }, []);
 
   const handleAutoFetch = async () => {
@@ -75,52 +92,62 @@ export default function AddQuestionPage() {
       return;
     }
 
-    const platform = detectPlatform(formData.link);
-    if (!platform) {
-      toast({
-        title: "Unsupported platform",
-        description:
-          "Currently supports LeetCode, Coding Ninjas and GeekForGeeks",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsAutoFetching(true);
-
     try {
-      const result = await autoFetchProblemDetails(formData.link);
+      const result = await axios.post<ApiResponse<QuestionAutofillResponse>>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/autofill`,
+        {
+          link: formData.link,
+        },
+        {
+          withCredentials: true,
+        }
+      );
 
-      if (result) {
-        const suggestedTopics = result.topic.split(",").map((t) => t.trim());
-        const newTopics = suggestedTopics.filter(
-          (topic) => !formData.topics.includes(topic)
-        );
-
-        setFormData((prev) => ({
-          ...prev,
-          title: result.title,
-          difficulty: result.difficulty,
-          topics: [...prev.topics, ...newTopics],
-        }));
-
-        toast({
-          title: "Problem details fetched!",
-          description: `Successfully loaded details from ${
-            result.platform
-          }. Added ${newTopics.length} topic${
-            newTopics.length > 1 ? "s" : ""
-          }.`,
-        });
-      } else {
+      if (!result.data.success) {
+        console.error("Auto-fetch error in server: ", result.data.errorMessage);
         toast({
           title: "Could not fetch details",
           description: "Unable to extract problem information from this link",
           variant: "destructive",
         });
+        return;
       }
+
+      const data = result.data.data;
+      const platform = data.platform;
+      if (!platform) {
+        toast({
+          title: "Unsupported platform",
+          description:
+            "Currently supports LeetCode, Codeforces and GeeksForGeeks",
+          variant: "destructive",
+        });
+        return;
+      } else {
+        setPlatformName(platform);
+      }
+
+      const suggestedTopics = data.topics.map((t) => t.trim());
+      const newTopics = suggestedTopics.filter(
+        (topic) => !formData.topics.includes(topic)
+      );
+
+      setFormData((prev) => ({
+        ...prev,
+        title: data.title,
+        difficulty: data.difficulty,
+        topics: [...prev.topics, ...newTopics],
+      }));
+
+      toast({
+        title: "Problem details fetched!",
+        description: `Successfully loaded details from ${
+          data.platform
+        }. Added ${newTopics.length} topic${newTopics.length > 1 ? "s" : ""}.`,
+      });
     } catch (error) {
-      console.error("[v0] Auto-fetch error:", error);
+      console.error("Auto-fetch error: ", error);
       toast({
         title: "Fetch failed",
         description: "An error occurred while fetching problem details",
@@ -131,26 +158,47 @@ export default function AddQuestionPage() {
     }
   };
 
-  const handleAddTopic = () => {
+  const handleAddTopic = async () => {
     const topic = formData.newTopic.trim();
-    if (!topic) return; // Prevent adding empty strings
+    if (!topic) return;
 
-    // Get existing topics from localStorage (or use an empty array)
-    const storedTopics = JSON.parse(localStorage.getItem("topics") || "[]");
+    try {
+      const result = await axios.post<ApiResponse<Topic>>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/topics`,
+        {
+          name: topic,
+        },
+        {
+          withCredentials: true,
+        }
+      );
 
-    // Add to storage if it doesn't already exist
-    if (!storedTopics.includes(topic)) {
-      storedTopics.push(topic);
-      localStorage.setItem("topics", JSON.stringify(storedTopics));
-    }
+      if (!result.data.success) {
+        console.error("Error while adding topic: ", result.data.errorMessage);
+        toast({
+          title: "Could not add topic",
+          description: "Unable to add a new topic",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    // Add to current formData if not already present
-    if (!formData.topics.includes(topic)) {
-      setFormData((prev) => ({
-        ...prev,
-        topics: [...prev.topics, topic],
-        newTopic: "",
-      }));
+      if (!formData.topics.includes(topic)) {
+        setFormData((prev) => ({
+          ...prev,
+          topics: [...prev.topics, topic],
+          newTopic: "",
+        }));
+
+        setExistingTopics((prev) => {
+          if (!prev.some((t) => t.name === topic)) {
+            return [...prev, result.data.data];
+          }
+          return prev;
+        });
+      }
+    } catch (error) {
+      console.error("Error while adding topic: ", error);
     }
   };
 
@@ -168,7 +216,7 @@ export default function AddQuestionPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const performQuestionValidation = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.title.trim() || !formData.difficulty) {
@@ -189,12 +237,35 @@ export default function AddQuestionPage() {
       return;
     }
 
-    // 🔹 Check for duplicate title
-    const existingQuestions = storage.getQuestions() || [];
-    const duplicate = existingQuestions.find(
-      (q) =>
-        q.title.trim().toLowerCase() === formData.title.trim().toLowerCase()
-    );
+    var duplicate: boolean = true;
+    try {
+      const result = await axios.post<ApiResponse<boolean>>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/checkIfExists`,
+        {
+          title: formData.title.trim(),
+        },
+        {
+          withCredentials: true,
+        }
+      );
+
+      if (!result.data.success) {
+        console.error(
+          "Error while adding question: ",
+          result.data.errorMessage
+        );
+        toast({
+          title: "Could not add question",
+          description: "Unable to add a new question",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      duplicate = result.data.data;
+    } catch (error) {
+      console.error("Error while checking for question: ", error);
+    }
 
     if (duplicate) {
       toast({
@@ -212,29 +283,37 @@ export default function AddQuestionPage() {
     setIsSubmitting(true);
 
     try {
-      storage.addQuestion({
-        title: formData.title.trim(),
-        topics: formData.topics,
-        difficulty: formData.difficulty,
-        link: formData.link.trim() || undefined,
-      });
+      const topicIds = formData.topics
+        .map((name) => existingTopics.find((t) => t.name === name)?.id)
+        .filter((id): id is string => Boolean(id));
 
-      const storedTopics = JSON.parse(localStorage.getItem("topics") || "[]");
-
-      formData.topics.forEach((topic) => {
-        if (!storedTopics.includes(topic)) {
-          storedTopics.push(topic);
+      const result = await axios.post<ApiResponse<QuestionResponse>>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions`,
+        {
+          title: formData.title.trim(),
+          link: formData.link.trim(),
+          reviseLater: formData.reviseLater || false,
+          topicIds,
+          difficulty: formData.difficulty,
+          note: formData.notes || undefined,
+        },
+        {
+          withCredentials: true,
         }
-      });
+      );
 
-      localStorage.setItem("topics", JSON.stringify(storedTopics));
-
-      toast({
-        title: "Question added successfully!",
-        description: `Added "${formData.title}" with ${
-          formData.topics.length
-        } topic${formData.topics.length > 1 ? "s" : ""}`,
-      });
+      if (!result.data.success) {
+        console.error(
+          "Error while adding question: ",
+          result.data.errorMessage
+        );
+        toast({
+          title: "Could not add question",
+          description: "Unable to add a new question",
+          variant: "destructive",
+        });
+        return;
+      }
 
       setFormData({
         title: "",
@@ -242,9 +321,12 @@ export default function AddQuestionPage() {
         newTopic: "",
         difficulty: "",
         link: "",
+        reviseLater: false,
+        notes: "",
       });
+      setPlatformName("");
     } catch (error) {
-      console.error("[v0] Add question error:", error);
+      console.error("Add question error:", error);
       toast({
         title: "Error adding question",
         description: "Something went wrong. Please try again.",
@@ -254,11 +336,6 @@ export default function AddQuestionPage() {
       setIsSubmitting(false);
     }
   };
-
-  const detectedPlatform = formData.link ? detectPlatform(formData.link) : null;
-  const platformName = detectedPlatform
-    ? platforms[detectedPlatform]?.name
-    : null;
 
   const handleSelectExistingTopic = (topic: string) => {
     if (topic && !formData.topics.includes(topic)) {
@@ -283,17 +360,15 @@ export default function AddQuestionPage() {
               Add New DSA Question
             </CardTitle>
             <CardDescription>
-              Add a new question to your practice collection. Fill in the
-              details to help organize your study sessions.
+              Add a new question to your practice collection.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Link Field with Auto-Fetch */}
+            <form onSubmit={performQuestionValidation} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="link" className="flex items-center gap-2">
                   <LinkIcon className="h-4 w-4" />
-                  Problem Link (Optional)
+                  Problem Link
                 </Label>
                 <div className="flex gap-2">
                   <Input
@@ -322,7 +397,7 @@ export default function AddQuestionPage() {
                     {isAutoFetching ? "Fetching..." : "Auto-Fill"}
                   </Button>
                 </div>
-                {platformName && (
+                {!platformName.trim() && (
                   <p className="text-sm text-muted-foreground">
                     Detected platform: {platformName}
                   </p>
@@ -361,8 +436,8 @@ export default function AddQuestionPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {existingTopics.map((topic) => (
-                            <SelectItem key={topic} value={topic}>
-                              {topic}
+                            <SelectItem key={topic.id} value={topic.name}>
+                              {topic.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -425,7 +500,7 @@ export default function AddQuestionPage() {
                 <Label>Difficulty *</Label>
                 <Select
                   value={formData.difficulty}
-                  onValueChange={(value: "Easy" | "Medium" | "Hard") =>
+                  onValueChange={(value: "EASY" | "MEDIUM" | "HARD") =>
                     setFormData({ ...formData, difficulty: value })
                   }
                 >
@@ -433,11 +508,37 @@ export default function AddQuestionPage() {
                     <SelectValue placeholder="Select difficulty level" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Easy">Easy</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="Hard">Hard</SelectItem>
+                    <SelectItem value="EASY">Easy</SelectItem>
+                    <SelectItem value="MEDIUM">Medium</SelectItem>
+                    <SelectItem value="HARD">Hard</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Revise Later Checkbox */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="reviseLater"
+                  checked={formData.reviseLater}
+                  onChange={(e) =>
+                    setFormData({ ...formData, reviseLater: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <Label htmlFor="reviseLater">Mark for revision later</Label>
+              </div>
+
+              {/* Notes Field */}
+              <div className="space-y-2" data-color-mode="light">
+                <Label htmlFor="notes">Notes (Markdown supported)</Label>
+                <MDEditor
+                  value={formData.notes}
+                  onChange={(value) =>
+                    setFormData({ ...formData, notes: value || "" })
+                  }
+                  height={200}
+                />
               </div>
 
               {/* Submit Buttons */}
@@ -460,32 +561,6 @@ export default function AddQuestionPage() {
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
-
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="text-lg">Auto-Fetch Support</CardTitle>
-            <CardDescription>
-              Automatically extract problem details from supported platforms
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {Object.entries(platforms).map(([key, platform]) => (
-                <div
-                  key={key}
-                  className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg"
-                >
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="font-medium">{platform.name}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-sm text-muted-foreground mt-3">
-              Paste a problem link and click "Auto-Fill" to automatically
-              populate the form with problem details.
-            </p>
           </CardContent>
         </Card>
       </div>

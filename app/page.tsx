@@ -24,13 +24,10 @@ import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { storage } from "@/lib/storage";
 import type { DSAQuestion } from "@/lib/types";
 import {
-  ExternalLink,
   RefreshCw,
   RotateCcw,
   NotebookPen,
   CheckCircle,
-  Repeat,
-  Check,
   Bookmark,
   BookMarked,
 } from "lucide-react";
