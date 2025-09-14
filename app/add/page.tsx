@@ -74,7 +74,10 @@ export default function AddQuestionPage() {
 
         setExistingTopics(result.data.data);
       } catch (error) {
-        console.error("Failed to parse topics from localStorage", error);
+        console.error(
+          "Error in fetching all topics from server: ",
+          error
+        );
         setExistingTopics([]);
       }
     }
@@ -281,19 +284,14 @@ export default function AddQuestionPage() {
 
   const confirmSubmit = async () => {
     setIsSubmitting(true);
-
     try {
-      const topicIds = formData.topics
-        .map((name) => existingTopics.find((t) => t.name === name)?.id)
-        .filter((id): id is string => Boolean(id));
-
       const result = await axios.post<ApiResponse<QuestionResponse>>(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions`,
         {
           title: formData.title.trim(),
           link: formData.link.trim(),
           reviseLater: formData.reviseLater || false,
-          topicIds,
+          topics: formData.topics,
           difficulty: formData.difficulty,
           note: formData.notes || undefined,
         },
@@ -325,6 +323,10 @@ export default function AddQuestionPage() {
         notes: "",
       });
       setPlatformName("");
+
+      toast({
+        title: "Added question successfully",
+      });
     } catch (error) {
       console.error("Add question error:", error);
       toast({
@@ -434,7 +436,7 @@ export default function AddQuestionPage() {
                         <SelectTrigger>
                           <SelectValue placeholder="Choose existing topic" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-48 overflow-y-auto">
                           {existingTopics.map((topic) => (
                             <SelectItem key={topic.id} value={topic.name}>
                               {topic.name}
@@ -530,7 +532,7 @@ export default function AddQuestionPage() {
               </div>
 
               {/* Notes Field */}
-              <div className="space-y-2" data-color-mode="light">
+              <div className="space-y-2" data-color-mode="dark">
                 <Label htmlFor="notes">Notes (Markdown supported)</Label>
                 <MDEditor
                   value={formData.notes}
@@ -553,11 +555,22 @@ export default function AddQuestionPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push("/")}
+                  onClick={() => {
+                    setFormData({
+                      title: "",
+                      topics: [],
+                      newTopic: "",
+                      difficulty: "",
+                      link: "",
+                      reviseLater: false,
+                      notes: "",
+                    });
+                    setPlatformName("");
+                  }}
                   disabled={isSubmitting || isAutoFetching}
                   className="bg-transparent hover:gradient-secondary hover:text-white"
                 >
-                  Cancel
+                  Clear
                 </Button>
               </div>
             </form>

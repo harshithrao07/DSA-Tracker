@@ -22,7 +22,6 @@ import { Navigation } from "@/components/navigation";
 import { NotesDialog } from "@/components/notes-dialog";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { storage } from "@/lib/storage";
-import type { DSAQuestion } from "@/lib/types";
 import {
   RefreshCw,
   RotateCcw,
@@ -33,6 +32,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
+import axios from "axios";
+import { ApiResponse } from "@/types/response";
+import { QuestionResponse } from "@/types/question";
+import { Topic } from "@/types/topic";
 
 export default function HomePage() {
   const [selectedTopic, setSelectedTopic] = useState<string>("all");
@@ -41,8 +44,10 @@ export default function HomePage() {
     "all" | "revision" | "normal"
   >("all");
   const [questionCount, setQuestionCount] = useState<number>(1);
-  const [topics, setTopics] = useState<string[]>([]);
-  const [currentQuestions, setCurrentQuestions] = useState<DSAQuestion[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [currentQuestions, setCurrentQuestions] = useState<QuestionResponse[]>(
+    []
+  );
   const [stats, setStats] = useState({
     totalQuestions: 0,
     solvedQuestions: 0,
@@ -52,11 +57,35 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [selectedQuestionForNotes, setSelectedQuestionForNotes] =
-    useState<DSAQuestion | null>(null);
+    useState<QuestionResponse | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useEffect(() => {
-    loadData();
+    async function fetchTopics() {
+      try {
+        const result = await axios.get<ApiResponse<Topic[]>>(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/topics`,
+          {
+            withCredentials: true,
+          }
+        );
+
+        if (!result.data.success) {
+          console.error(
+            "Error in fetching all topics from server: ",
+            result.data.errorMessage
+          );
+          return;
+        }
+
+        setTopics(result.data.data);
+      } catch (error) {
+        console.error("Error in fetching all topics from server: ", error);
+        setTopics([]);
+      }
+    }
+
+    fetchTopics();
   }, []);
 
   useEffect(() => {
@@ -78,7 +107,7 @@ export default function HomePage() {
     const cached = localStorage.getItem("lastRandomQuestions");
     if (cached) {
       try {
-        const parsed: DSAQuestion[] = JSON.parse(cached);
+        const parsed: QuestionResponse[] = JSON.parse(cached);
         if (parsed.length) {
           setCurrentQuestions(parsed);
         }
@@ -88,58 +117,110 @@ export default function HomePage() {
     }
   }, []);
 
-  const loadData = () => {
-    const allTopics = JSON.parse(localStorage.getItem("topics")) || [];
-    const appStats = storage.getStats();
-    setTopics(allTopics);
-    setStats(appStats);
-  };
-
-  const getRandomQuestions = () => {
+  const getRandomQuestions = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      const topic = selectedTopic === "all" ? undefined : selectedTopic;
-      const difficulty =
-        selectedDifficulty === "all" ? undefined : selectedDifficulty;
-      const revision = selectedRevision === "all" ? "all" : selectedRevision; // 👈 new state
+    try {
+      const params = new URLSearchParams({
+        topics: selectedTopic === "all" ? "" : selectedTopic,
+        difficulty: selectedDifficulty === "all" ? "" : selectedDifficulty,
+        revision: selectedRevision,
+        count: questionCount.toString(),
+      });
 
-      const questions = storage.getRandomQuestions(
-        questionCount,
-        topic,
-        difficulty,
-        revision
+      const result = await axios.get<ApiResponse<QuestionResponse[]>>(
+        `${
+          process.env.NEXT_PUBLIC_BACKEND_URL
+        }/api/v1/questions/random?${params.toString()}`,
+        {
+          withCredentials: true,
+        }
       );
 
-      setCurrentQuestions(questions);
-      const filters = {
-        topic: selectedTopic,
-        difficulty: selectedDifficulty,
-        revision: selectedRevision,
-        count: questionCount,
-      };
-      localStorage.setItem("filters", JSON.stringify(filters));
-      localStorage.setItem("lastRandomQuestions", JSON.stringify(questions));
-      setIsLoading(false);
-    }, 300);
+      if (!result.data.success) {
+        console.error(
+          "Error in getting random quesions from server: ",
+          result.data.errorMessage
+        );
+        return;
+      }
+
+      setCurrentQuestions(result.data.data);
+      localStorage.setItem(
+        "lastRandomQuestions",
+        JSON.stringify(result.data.data)
+      );
+    } catch (error) {
+      console.error("Error in getting random question from server: ", error);
+    }
+
+    const filters = {
+      topic: selectedTopic,
+      difficulty: selectedDifficulty,
+      revision: selectedRevision,
+      count: questionCount,
+    };
+    localStorage.setItem("filters", JSON.stringify(filters));
+    setIsLoading(false);
   };
 
-  const markAsSolved = (questionId: string) => {
-    storage.markAsSolved(questionId);
-    setCurrentQuestions((prev) => {
-      const updated = prev.filter((q) => q.id !== questionId);
-      // also update localStorage cache
-      if (typeof window !== "undefined") {
-        localStorage.setItem("lastRandomQuestions", JSON.stringify(updated));
-      }
-      return updated;
-    });
-    loadData();
+  const updateQuestionField = async (
+    questionId: string,
+    field: "solved" | "reviseLater",
+    value: boolean
+  ) => {
+    try {
+      const result = await axios.put<ApiResponse<QuestionResponse>>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/${questionId}`,
+        { [field]: value }, // dynamic field update
+        { withCredentials: true }
+      );
 
-    toast({
-      title: "🎉 Congratulations!",
-      description: "You just solved this problem. Keep going! 🚀",
-      variant: "default",
-    });
+      if (!result.data.success) {
+        toast({
+          title: "Error",
+          description: `Failed to update question ${field}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (field === "solved") {
+        setCurrentQuestions((prev) => {
+          const updated = prev.filter((q) => q.id !== questionId);
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "lastRandomQuestions",
+              JSON.stringify(updated)
+            );
+          }
+          return updated;
+        });
+
+        toast({
+          title: "🎉 Congratulations!",
+          description: "You just solved this problem. Keep going! 🚀",
+          variant: "default",
+        });
+      } else if (field === "reviseLater") {
+        setCurrentQuestions((prev) =>
+          prev.map((q) => (q.id === questionId ? result.data.data : q))
+        );
+
+        toast({
+          title: `Question updated`,
+          description: value
+            ? "Marked for revision"
+            : "Removed from revision list",
+        });
+      }
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+      toast({
+        title: "Error",
+        description: "Something went wrong updating the question",
+        variant: "destructive",
+      });
+    }
   };
 
   const resetAllProgress = () => {
@@ -149,25 +230,24 @@ export default function HomePage() {
   const confirmResetProgress = () => {
     storage.resetAllQuestions();
     setCurrentQuestions([]);
-    loadData();
   };
 
   const handleNotesUpdated = () => {
-    if (selectedQuestionForNotes) {
-      const updatedQuestions = storage.getQuestions();
-      const updatedQuestion = updatedQuestions.find(
-        (q) => q.id === selectedQuestionForNotes.id
-      );
-      if (updatedQuestion) {
-        setCurrentQuestions((prev) =>
-          prev.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q))
-        );
-        setSelectedQuestionForNotes(updatedQuestion);
-      }
-    }
+    // if (selectedQuestionForNotes) {
+    //   const updatedQuestions = storage.getQuestions();
+    //   const updatedQuestion = updatedQuestions.find(
+    //     (q) => q.id === selectedQuestionForNotes.id
+    //   );
+    //   if (updatedQuestion) {
+    //     setCurrentQuestions((prev) =>
+    //       prev.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q))
+    //     );
+    //     setSelectedQuestionForNotes(updatedQuestion);
+    //   }
+    // }
   };
 
-  const openNotesDialog = (question: DSAQuestion) => {
+  const openNotesDialog = (question: QuestionResponse) => {
     setSelectedQuestionForNotes(question);
     setNotesDialogOpen(true);
   };
@@ -184,10 +264,6 @@ export default function HomePage() {
         return "bg-gray-500/20 text-gray-400 border-gray-500/30";
     }
   };
-
-  function markForRevision(id: string): void {
-    storage.toggleReviseLater(id);
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -255,8 +331,8 @@ export default function HomePage() {
                   <SelectContent>
                     <SelectItem value="all">All Topics</SelectItem>
                     {topics.map((topic) => (
-                      <SelectItem key={topic} value={topic}>
-                        {topic}
+                      <SelectItem key={topic.id} value={topic.name}>
+                        {topic.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -287,7 +363,7 @@ export default function HomePage() {
                 <label className="text-sm font-medium mb-2 block">
                   Revision
                 </label>
-                <Select
+                {/* <Select
                   value={selectedRevision}
                   onValueChange={setSelectedRevision}
                 >
@@ -301,7 +377,7 @@ export default function HomePage() {
                     </SelectItem>
                     <SelectItem value="normal">Not Marked</SelectItem>
                   </SelectContent>
-                </Select>
+                </Select> */}
               </div>
 
               <div className="w-32">
@@ -407,7 +483,7 @@ export default function HomePage() {
                         }).format(new Date(question.createdAt))}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    {/* <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -444,13 +520,19 @@ export default function HomePage() {
                       >
                         Skip
                       </Button>
-                    </div>
+                    </div> */}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex gap-2">
                     <Button
-                      onClick={() => markAsSolved(question.id)}
+                      onClick={() =>
+                        updateQuestionField(
+                          question.id,
+                          "solved",
+                          !question.solved
+                        )
+                      }
                       className="gradient-primary text-white border-0 glow-primary hover:glow-accent transition-all duration-300 flex items-center gap-2"
                     >
                       <CheckCircle className="h-4 w-4" />
@@ -470,27 +552,27 @@ export default function HomePage() {
                                 const updatedQuestion =
                                   storage.toggleReviseLater(question.id);
 
-                                setCurrentQuestions((prev) => {
-                                  const updated = prev.map((q) =>
-                                    q.id === question.id
-                                      ? {
-                                          ...q,
-                                          reviseLater:
-                                            updatedQuestion.reviseLater,
-                                        }
-                                      : q
-                                  );
+                                // setCurrentQuestions((prev) => {
+                                //   const updated = prev.map((q) =>
+                                //     q.id === question.id
+                                //       ? {
+                                //           ...q,
+                                //           reviseLater:
+                                //             updatedQuestion.reviseLater,
+                                //         }
+                                //       : q
+                                //   );
 
-                                  // also update localStorage cache
-                                  if (typeof window !== "undefined") {
-                                    localStorage.setItem(
-                                      "lastRandomQuestions",
-                                      JSON.stringify(updated)
-                                    );
-                                  }
+                                //   // also update localStorage cache
+                                //   if (typeof window !== "undefined") {
+                                //     localStorage.setItem(
+                                //       "lastRandomQuestions",
+                                //       JSON.stringify(updated)
+                                //     );
+                                //   }
 
-                                  return updated;
-                                });
+                                //   return updated;
+                                // });
 
                                 // ✅ Show correct toast based on new state
                                 toast({
@@ -574,7 +656,7 @@ export default function HomePage() {
       </div>
 
       {/* Notes Dialog Component */}
-      {selectedQuestionForNotes && (
+      {/* {selectedQuestionForNotes && (
         <NotesDialog
           questionId={selectedQuestionForNotes.id}
           questionTitle={selectedQuestionForNotes.title}
@@ -583,7 +665,7 @@ export default function HomePage() {
           onOpenChange={setNotesDialogOpen}
           onNotesUpdated={handleNotesUpdated}
         />
-      )}
+      )} */}
 
       {/* Confirmation Dialog */}
       <ConfirmationDialog

@@ -15,4 +15,13 @@ export interface QuestionResponse {
   reviseLater: boolean;
   topics: string[];
   noteId: string;
+  createdAt: number;
+  solveHistory: number[];
+}
+
+export interface AllQuestions {
+  totalQuestions: number;
+  solvedQuestions: number;
+  remQuestions: number;
+  questionResponseDTOList: QuestionResponse[];
 }

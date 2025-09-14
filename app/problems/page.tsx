@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,39 +15,48 @@ import { Badge } from "@/components/ui/badge";
 import { Navigation } from "@/components/navigation";
 import { NotesDialog } from "@/components/notes-dialog";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
-import { storage } from "@/lib/storage";
-import type { DSAQuestion } from "@/lib/types";
 import {
   Search,
   Filter,
-  Check,
   Trash2,
   Calendar,
   RotateCcw,
   CheckCircle2,
   Circle,
   NotebookPen,
-  Clock,
-  Repeat,
   BookMarked,
   Bookmark,
+  ChevronDown,
+  History,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ApiResponse } from "@/types/response";
+import { AllQuestions, QuestionResponse } from "@/types/question";
+import axios from "axios";
+import { Topic } from "@/types/topic";
+import { useDebounce } from "@/hooks/use-debounce";
+import Link from "next/link";
 
 export default function ProblemsPage() {
   const { toast } = useToast();
-  const [questions, setQuestions] = useState<DSAQuestion[]>([]);
-  const [filteredQuestions, setFilteredQuestions] = useState<DSAQuestion[]>([]);
+  const [questions, setQuestions] = useState<QuestionResponse[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [stats, setStats] = useState({
+    totalQuestions: 0,
+    solvedQuestions: 0,
+    remQuestions: 0,
+  });
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("all");
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [topics, setTopics] = useState<string[]>([]);
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
-  const [selectedQuestion, setSelectedQuestion] = useState<DSAQuestion | null>(
-    null
-  );
+  const [selectedQuestion, setSelectedQuestion] =
+    useState<QuestionResponse | null>(null);
+  const [expandedHistories, setExpandedHistories] = useState<string[]>([]);
   const [confirmationDialog, setConfirmationDialog] = useState<{
     open: boolean;
     title: string;
@@ -59,138 +68,265 @@ export default function ProblemsPage() {
     description: "",
     onConfirm: () => {},
   });
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const [infiniteLoading, setInfiniteLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+
+  const loaderRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    loadQuestions();
-  }, []);
-
-  useEffect(() => {
-    filterAndSortQuestions();
+    fetchQuestions();
   }, [
-    questions,
-    searchTerm,
+    page,
+    pageSize,
+    debouncedSearchTerm,
     selectedTopic,
     selectedDifficulty,
     selectedStatus,
     sortBy,
   ]);
 
-  const loadQuestions = () => {
-    const allQuestions = storage.getQuestions() || [];
-    const topicsSet = new Set<string>();
-    allQuestions.forEach((q) => {
-      if (q.topics) {
-        q.topics.forEach((topic) => topicsSet.add(topic));
-      }
-    });
-    setQuestions(allQuestions);
-    setTopics(Array.from(topicsSet).sort());
-  };
+  useEffect(() => {
+    // whenever filters change, reset
+    setPage(0);
+    setHasMore(true);
+    setQuestions([]);
+    fetchQuestions();
+  }, [
+    debouncedSearchTerm,
+    selectedTopic,
+    selectedDifficulty,
+    selectedStatus,
+    sortBy,
+  ]);
 
-  const filterAndSortQuestions = () => {
-    let filtered = [...(questions || [])];
-
-    // Apply search filter
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (q) =>
-          q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (q.topics || []).some((topic) =>
-            topic.toLowerCase().includes(searchTerm.toLowerCase())
-          ) ||
-          (q.notes && q.notes.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-
-    // Apply topic filter
-    if (selectedTopic !== "all") {
-      filtered = filtered.filter((q) =>
-        (q.topics || []).includes(selectedTopic)
-      );
-    }
-
-    // Apply difficulty filter
-    if (selectedDifficulty !== "all") {
-      filtered = filtered.filter((q) => q.difficulty === selectedDifficulty);
-    }
-
-    // Apply status filter
-    if (selectedStatus !== "all") {
-      if (selectedStatus === "revise") {
-        filtered = filtered.filter((q) => q.reviseLater);
-      } else {
-        filtered = filtered.filter((q) =>
-          selectedStatus === "solved" ? q.isSolved : !q.isSolved
+  useEffect(() => {
+    async function fetchTopics() {
+      try {
+        const result = await axios.get<ApiResponse<Topic[]>>(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/topics`,
+          {
+            withCredentials: true,
+          }
         );
+
+        if (!result.data.success) {
+          console.error(
+            "Error in fetching all topics from server: ",
+            result.data.errorMessage
+          );
+          return;
+        }
+
+        setTopics(result.data.data);
+      } catch (error) {
+        console.error("Error in fetching all topics from server: ", error);
+        setTopics([]);
       }
     }
 
-    // Apply sorting
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case "newest":
-          return (
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        case "oldest":
-          return (
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
-        case "title":
-          return a.title.localeCompare(b.title);
-        case "difficulty":
-          const difficultyOrder = { Easy: 1, Medium: 2, Hard: 3 };
-          return difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty];
-        case "topic":
-          return (a.topics?.[0] || "").localeCompare(b.topics?.[0] || "");
-        default:
-          return 0;
+    fetchTopics();
+  }, []);
+
+  useEffect(() => {
+    if (!loaderRef.current) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !infiniteLoading && hasMore) {
+        setPage((prev) => prev + 1);
       }
     });
 
-    setFilteredQuestions(filtered);
-  };
+    observer.observe(loaderRef.current);
 
-  const toggleSolved = (questionId: string, currentStatus: boolean) => {
-    if (currentStatus) {
-      storage.markAsUnsolved(questionId);
-      toast({
-        title: "Marked as unsolved",
-        description: "Question moved back to practice list",
+    return () => {
+      if (loaderRef.current) observer.unobserve(loaderRef.current);
+    };
+  }, [infiniteLoading, hasMore]);
+
+  async function fetchQuestions() {
+    page !== 0 && setInfiniteLoading(true);
+
+    try {
+      let apiSortBy = sortBy;
+      let sortDir = "";
+
+      switch (sortBy) {
+        case "oldest":
+          apiSortBy = "createdAt";
+          sortDir = "asc";
+          break;
+        case "title":
+          apiSortBy = "title";
+          sortDir = "asc";
+          break;
+        case "newest":
+        default:
+          apiSortBy = "createdAt";
+          sortDir = "desc";
+          break;
+      }
+
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+        key: debouncedSearchTerm.trim(),
+        topics: selectedTopic === "all" ? "" : selectedTopic,
+        difficulty: selectedDifficulty === "all" ? "" : selectedDifficulty,
+        status: selectedStatus === "all" ? "" : selectedStatus,
+        sortBy: apiSortBy,
+        sortDir,
       });
-    } else {
-      storage.markAsSolved(questionId);
+
+      const result = await axios.get<ApiResponse<AllQuestions>>(
+        `${
+          process.env.NEXT_PUBLIC_BACKEND_URL
+        }/api/v1/questions?${params.toString()}`,
+        { withCredentials: true }
+      );
+
+      if (!result.data.success) {
+        console.error(
+          "Error in fetching questions from server: ",
+          result.data.errorMessage
+        );
+
+        toast({
+          title: "Error",
+          description: "Error in fetching questions",
+          variant: "destructive",
+        });
+
+        return;
+      }
+
+      const allQuestions = result.data.data.questionResponseDTOList;
+
+      if (page === 0) {
+        setStats({
+          totalQuestions: result.data.data.totalQuestions,
+          solvedQuestions: result.data.data.solvedQuestions,
+          remQuestions: result.data.data.remQuestions,
+        });
+        setQuestions(allQuestions);
+        setHasMore(true);
+      } else {
+        setQuestions((prev) => {
+          const merged = [...prev, ...allQuestions];
+          const unique = Array.from(
+            new Map(merged.map((q) => [q.id, q])).values()
+          );
+          return unique;
+        });
+      }
+
+      if (allQuestions.length < pageSize) {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Error in fetching questions from server: ", error);
+
       toast({
-        title: "Marked as solved",
-        description: "Great job! Question completed",
+        title: "Error",
+        description: "Error in fetching questions",
+        variant: "destructive",
       });
+
+      setQuestions([]);
+    } finally {
+      setInfiniteLoading(false);
     }
-    loadQuestions();
-  };
+  }
 
   const deleteQuestion = (questionId: string, title: string) => {
     setConfirmationDialog({
       open: true,
       title: "Delete Question",
       description: `Are you sure you want to delete "${title}"? This action cannot be undone.`,
-      onConfirm: () => {
-        storage.deleteQuestion(questionId);
-        toast({
-          title: "Question deleted",
-          description: `"${title}" has been removed`,
-        });
-        loadQuestions();
+      onConfirm: async () => {
+        try {
+          const result = await axios.delete<ApiResponse<boolean>>(
+            `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/${questionId}`,
+            { withCredentials: true }
+          );
+
+          if (!result.data.success) {
+            console.error(
+              "Error in deleting question: ",
+              result.data.errorMessage
+            );
+            return;
+          }
+
+          setQuestions((prevQuestion) =>
+            prevQuestion.filter((quest) => quest.id != questionId)
+          );
+
+          toast({
+            title: "Question deleted",
+            description: `"${title}" has been removed`,
+          });
+        } catch (error) {
+          console.error("Error in deleting question: ", error);
+          toast({
+            title: "Error",
+            description: "Error in deleting question",
+            variant: "destructive",
+          });
+        }
       },
     });
   };
 
-  const openNotesDialog = (question: DSAQuestion) => {
-    setSelectedQuestion(question);
-    setNotesDialogOpen(true);
+  const updateQuestionField = async (
+    questionId: string,
+    field: "solved" | "reviseLater",
+    value: boolean
+  ) => {
+    try {
+      const result = await axios.put<ApiResponse<QuestionResponse>>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/${questionId}`,
+        { [field]: value }, // dynamic field update
+        { withCredentials: true }
+      );
+
+      if (!result.data.success) {
+        toast({
+          title: "Error",
+          description: `Failed to update question ${field}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === questionId ? result.data.data : q))
+      );
+
+      toast({
+        title: `Question updated`,
+        description:
+          field === "solved"
+            ? value
+              ? "Marked as solved"
+              : "Marked as unsolved"
+            : value
+            ? "Marked for revision"
+            : "Removed from revision list",
+      });
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+      toast({
+        title: "Error",
+        description: "Something went wrong updating the question",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleNotesUpdated = () => {
-    loadQuestions();
+  const openNotesDialog = (question: QuestionResponse) => {
+    setSelectedQuestion(question);
+    setNotesDialogOpen(true);
   };
 
   const resetAllFilters = () => {
@@ -199,42 +335,39 @@ export default function ProblemsPage() {
     setSelectedDifficulty("all");
     setSelectedStatus("all");
     setSortBy("newest");
+    setPageSize(10);
+  };
+
+  const toggleSolveHistory = (questionId: string) => {
+    setExpandedHistories((prev) =>
+      prev.includes(questionId)
+        ? prev.filter((id) => id !== questionId)
+        : [...prev, questionId]
+    );
   };
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
-      case "Easy":
+      case "EASY":
         return "bg-green-500/20 text-green-400 border-green-500/30";
-      case "Medium":
+      case "MEDIUM":
         return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-      case "Hard":
+      case "HARD":
         return "bg-red-500/20 text-red-400 border-red-500/30";
       default:
         return "bg-gray-500/20 text-gray-400 border-gray-500/30";
     }
   };
 
-  const formatDate = (date: Date) => {
+  const formatDate = (epochSeconds: number) => {
+    const millis = epochSeconds * 1000; // convert seconds → ms
     return new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
-    }).format(date);
-  };
-
-  const stats = storage.getStats();
-
-  const toggleReviseLater = (questionId: string, currentStatus: boolean) => {
-    storage.toggleReviseLater(questionId, !currentStatus);
-    toast({
-      title: currentStatus
-        ? "Removed from revise later"
-        : "Added to revise later",
-      description: currentStatus
-        ? "Question removed from revision list"
-        : "Question marked for revision",
-    });
-    loadQuestions();
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(millis));
   };
 
   return (
@@ -244,21 +377,55 @@ export default function ProblemsPage() {
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">All Problems</h1>
-          <p className="text-muted-foreground">
-            Manage your DSA question collection. {stats.totalQuestions} total
-            questions, {stats.solvedQuestions} solved
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">All Problems</h1>
+              <p className="text-muted-foreground">
+                Manage your DSA question collection.
+              </p>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <Card className="p-4 text-center shadow-sm">
+                <p className="text-sm text-muted-foreground">Total</p>
+                <p className="text-xl font-bold">{stats.totalQuestions}</p>
+              </Card>
+              <Card className="p-4 text-center shadow-sm">
+                <p className="text-sm text-muted-foreground">Solved</p>
+                <p className="text-xl font-bold text-green-600">
+                  {stats.solvedQuestions}
+                </p>
+              </Card>
+              <Card className="p-4 text-center shadow-sm">
+                <p className="text-sm text-muted-foreground">Remaining</p>
+                <p className="text-xl font-bold text-red-600">
+                  {stats.remQuestions}
+                </p>
+              </Card>
+            </div>
+          </div>
         </div>
 
         {/* Filters and Search */}
         <Card className="mb-6">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Filter className="h-5 w-5" />
               Filters & Search
             </CardTitle>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetAllFilters}
+              className="flex items-center gap-2"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset Filters
+            </Button>
           </CardHeader>
+
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               {/* Search */}
@@ -282,8 +449,8 @@ export default function ProblemsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Topics</SelectItem>
                   {(topics || []).map((topic) => (
-                    <SelectItem key={topic} value={topic}>
-                      {topic}
+                    <SelectItem key={topic.id} value={topic.name}>
+                      {topic.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -313,8 +480,8 @@ export default function ProblemsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="solved">Solved</SelectItem>
-                  <SelectItem value="unsolved">Unsolved</SelectItem>
-                  <SelectItem value="revise">Revise Later</SelectItem>
+                  <SelectItem value="notSolved">Unsolved</SelectItem>
+                  <SelectItem value="reviseLater">Revise Later</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -327,33 +494,14 @@ export default function ProblemsPage() {
                   <SelectItem value="newest">Newest First</SelectItem>
                   <SelectItem value="oldest">Oldest First</SelectItem>
                   <SelectItem value="title">Title A-Z</SelectItem>
-                  <SelectItem value="difficulty">Difficulty</SelectItem>
-                  <SelectItem value="topic">Topic A-Z</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            {/* Reset Filters */}
-            <div className="flex justify-between items-center mt-4">
-              <div className="text-sm text-muted-foreground">
-                Showing {(filteredQuestions || []).length} of{" "}
-                {(questions || []).length} questions
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetAllFilters}
-                className="flex items-center gap-2 bg-transparent"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset Filters
-              </Button>
             </div>
           </CardContent>
         </Card>
 
         {/* Questions List */}
-        {(filteredQuestions || []).length === 0 ? (
+        {(questions || []).length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">
               <div className="text-muted-foreground mb-4">
@@ -374,11 +522,13 @@ export default function ProblemsPage() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {(filteredQuestions || []).map((question) => (
+            {(questions || []).map((question) => (
               <Card
                 key={question.id}
-                className={`transition-all ${
-                  question.isSolved ? "bg-green-500/5 border-green-500/20" : ""
+                className={`transition-all hover:shadow-lg bg-[#0e0e0e] border-gray-800 ${
+                  question.solved
+                    ? "border-green-700/50 bg-green-950/20"
+                    : "hover:border-gray-700"
                 }`}
               >
                 <CardContent className="p-6">
@@ -388,41 +538,49 @@ export default function ProblemsPage() {
                       <div className="flex items-start gap-3">
                         <button
                           onClick={() =>
-                            toggleSolved(question.id, question.isSolved)
+                            updateQuestionField(
+                              question.id,
+                              "solved",
+                              !question.solved
+                            )
                           }
-                          className="mt-1 text-muted-foreground hover:text-foreground transition-colors"
+                          className={`mt-1 cursor-pointer transition-colors ${
+                            question.solved
+                              ? "text-green-500 hover:text-green-400"
+                              : "text-gray-500 hover:text-gray-300"
+                          }`}
                           title={
-                            question.isSolved
+                            question.solved
                               ? "Mark as unsolved"
                               : "Mark as solved"
                           }
                         >
-                          {question.isSolved ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-500" />
+                          {question.solved ? (
+                            <CheckCircle2 className="h-5 w-5" />
                           ) : (
                             <Circle className="h-5 w-5" />
                           )}
                         </button>
                         <div className="flex-1">
                           {question.link ? (
-                            <a
+                            <Link
                               href={question.link}
                               target="_blank"
                               rel="noopener noreferrer"
                               className={`text-lg font-semibold hover:text-blue-400 transition-colors cursor-pointer ${
-                                question.isSolved
-                                  ? "line-through text-muted-foreground"
-                                  : ""
+                                question.solved
+                                  ? "line-through text-gray-500"
+                                  : "text-white"
                               }`}
                             >
                               {question.title}
-                            </a>
+                            </Link>
                           ) : (
                             <h3
                               className={`text-lg font-semibold ${
-                                question.isSolved
-                                  ? "line-through text-muted-foreground"
-                                  : ""
+                                question.solved
+                                  ? "line-through text-gray-500"
+                                  : "text-white"
                               }`}
                             >
                               {question.title}
@@ -433,52 +591,100 @@ export default function ProblemsPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => openNotesDialog(question)}
-                          className="flex cursor-pointer items-center gap-2"
+                          className="flex cursor-pointer items-center gap-2 bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
                           title={
-                            question.notes ? "View/Edit Notes" : "Add Notes"
+                            question.noteId ? "View/Edit Notes" : "Add Notes"
                           }
                         >
                           <NotebookPen className="h-4 w-4" />
-                          {question.notes ? "Notes" : "Add Notes"}
+                          {question.noteId ? "View/Edit Notes" : "Add Notes"}
                         </Button>
                       </div>
 
                       {/* Badges */}
                       <div className="flex flex-wrap gap-2 ml-8">
                         {(question.topics || []).map((topic, index) => (
-                          <Badge key={index} variant="secondary">
+                          <Badge
+                            key={index}
+                            variant="secondary"
+                            className="px-2 py-1 bg-gray-800 text-gray-300 border-gray-700 text-xs"
+                          >
                             {topic}
                           </Badge>
                         ))}
                         <Badge
-                          className={getDifficultyColor(question.difficulty)}
+                          className={`px-2 py-1 text-xs ${getDifficultyColor(
+                            question.difficulty
+                          )}`}
                         >
-                          {question.difficulty}
+                          {question.difficulty.charAt(0).toUpperCase() +
+                            question.difficulty.slice(1).toLowerCase()}
                         </Badge>
-                        {question.isSolved && (
-                          <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                            Solved
+                        {question.solved && (
+                          <Badge className="px-2 py-1 bg-green-900/50 text-green-400 border-green-700/50 text-xs">
+                            ✓ Solved
                           </Badge>
                         )}
                         {question.reviseLater && (
-                          <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">
-                            Marked for Revision
+                          <Badge className="px-2 py-1 bg-orange-900/50 text-orange-400 border-orange-700/50 text-xs">
+                            Revision
                           </Badge>
                         )}
                       </div>
 
                       {/* Dates */}
-                      <div className="flex items-center gap-4 ml-8 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          Added {formatDate(question.createdAt)}
-                        </div>
-                        {question.solvedAt && (
+                      <div className="ml-8 space-y-2">
+                        <div className="flex items-center gap-4 text-sm text-gray-400">
                           <div className="flex items-center gap-1">
-                            <Check className="h-4 w-4" />
-                            Solved {formatDate(question.solvedAt)}
+                            <Calendar className="h-4 w-4" />
+                            Added {formatDate(question.createdAt)}
                           </div>
-                        )}
+                          {question.solveHistory &&
+                            question.solveHistory.length > 0 && (
+                              <button
+                                onClick={() => toggleSolveHistory(question.id)}
+                                className="flex items-center gap-1 cursor-pointer text-green-400 hover:text-green-300 transition-colors"
+                                title="View solve history"
+                              >
+                                <History className="h-4 w-4" />
+                                <span>
+                                  {question.solveHistory.length} solve
+                                  {question.solveHistory.length !== 1
+                                    ? "s"
+                                    : ""}
+                                </span>
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${
+                                    expandedHistories?.includes(question.id)
+                                      ? "rotate-180"
+                                      : ""
+                                  }`}
+                                />
+                              </button>
+                            )}
+                        </div>
+
+                        {/* Solve History Timeline */}
+                        {question.solveHistory &&
+                          question.solveHistory.length > 0 &&
+                          expandedHistories?.includes(question.id) && (
+                            <div className="mt-3 pl-4 border-l-2 border-gray-700 space-y-2">
+                              <div className="text-xs font-medium text-gray-300 mb-2">
+                                Solved Timeline
+                              </div>
+                              {question.solveHistory.map((date, index) => (
+                                <div
+                                  key={index}
+                                  className="flex items-center gap-2 text-sm"
+                                >
+                                  <div className="w-2 h-2 bg-green-500 rounded-full -ml-[5px]"></div>
+                                  <span className="text-gray-400">
+                                    Solved on {formatDate(date)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                       </div>
                     </div>
 
@@ -488,15 +694,16 @@ export default function ProblemsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() =>
-                          toggleReviseLater(
+                          updateQuestionField(
                             question.id,
-                            question.reviseLater || false
+                            "reviseLater",
+                            !question.reviseLater
                           )
                         }
                         className={`flex cursor-pointer items-center gap-2 ${
                           question.reviseLater
-                            ? "bg-orange-500/10 border-orange-500/30"
-                            : ""
+                            ? "bg-orange-900/30 border-orange-700/50 text-orange-400"
+                            : "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-orange-400"
                         }`}
                         title={
                           question.reviseLater
@@ -509,9 +716,7 @@ export default function ProblemsPage() {
                         ) : (
                           <Bookmark className="h-4 w-4" />
                         )}
-                        {question.reviseLater
-                          ? "Marked for Revision"
-                          : "Mark for Revision"}
+                        {question.reviseLater ? "Marked" : "Mark"}
                       </Button>
 
                       <Button
@@ -520,7 +725,7 @@ export default function ProblemsPage() {
                         onClick={() =>
                           deleteQuestion(question.id, question.title)
                         }
-                        className="text-destructive hover:text-destructive-foreground hover:bg-destructive"
+                        className="text-red-400 bg-gray-800 border-gray-700 hover:text-red-300 hover:bg-red-900/20 hover:border-red-700/50"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -535,12 +740,9 @@ export default function ProblemsPage() {
 
       {selectedQuestion && (
         <NotesDialog
-          questionId={selectedQuestion.id}
-          questionTitle={selectedQuestion.title}
-          currentNotes={selectedQuestion.notes}
+          selectedQuestion={selectedQuestion}
           open={notesDialogOpen}
           onOpenChange={setNotesDialogOpen}
-          onNotesUpdated={handleNotesUpdated}
         />
       )}
 
@@ -555,6 +757,10 @@ export default function ProblemsPage() {
         variant="destructive"
         onConfirm={confirmationDialog.onConfirm}
       />
+
+      <div ref={loaderRef} className="h-10 flex items-center justify-center">
+        {infiniteLoading && <span className="text-gray-400">Loading...</span>}
+      </div>
     </div>
   );
 }
