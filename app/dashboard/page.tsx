@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -10,88 +9,47 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { Trophy, Target, TrendingUp, RotateCcw, BookOpen } from "lucide-react";
-import { storage } from "@/lib/storage";
-import type { DSAQuestion } from "@/lib/types";
-import { useToast } from "@/hooks/use-toast";
+import {
+  Trophy,
+  Target,
+  TrendingUp,
+  BookOpen,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
 import { Navigation } from "@/components/navigation";
-import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import Profile from "@/components/ProfileComponent";
+import { useStats } from "@/context/StatsContext";
 
 export default function Dashboard() {
-  const [questions, setQuestions] = useState<DSAQuestion[]>([]);
-  const { toast } = useToast();
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const { stats } = useStats();
 
-  useEffect(() => {
-    setQuestions(storage.getQuestions());
-  }, []);
-
-  const totalQuestions = questions.length;
-  const solvedQuestions = questions.filter((q) => q.isSolved).length;
-  const unsolvedQuestions = totalQuestions - solvedQuestions;
+  const totalQuestions = stats.totalQuestions;
+  const solvedQuestions = stats.solvedQuestions;
+  const unsolvedQuestions = stats.remQuestions;
   const overallProgress =
     totalQuestions > 0 ? (solvedQuestions / totalQuestions) * 100 : 0;
 
-  const allTopics = questions.flatMap((q) => q.topics);
-  const uniqueTopics = [...new Set(allTopics)].filter(Boolean);
-  const topicStats = uniqueTopics
-    .map((topicName) => {
-      const topicQuestions = questions.filter((q) =>
-        q.topics.includes(topicName)
-      );
-      const topicSolved = topicQuestions.filter((q) => q.isSolved).length;
-      const topicTotal = topicQuestions.length;
-      const progress = topicTotal > 0 ? (topicSolved / topicTotal) * 100 : 0;
-
-      return {
-        name: topicName,
-        total: topicTotal,
-        solved: topicSolved,
-        unsolved: topicTotal - topicSolved,
-        progress: Math.round(progress),
-      };
-    })
-    .filter((stat) => stat.total > 0);
+  const topicStats = stats.questionStatsCountTopics;
 
   // Difficulty-wise statistics
-  const difficultyStats = [
-    {
-      name: "Easy",
-      solved: questions.filter((q) => q.difficulty === "Easy" && q.isSolved)
-        .length,
-      total: questions.filter((q) => q.difficulty === "Easy").length,
-    },
-    {
-      name: "Medium",
-      solved: questions.filter((q) => q.difficulty === "Medium" && q.isSolved)
-        .length,
-      total: questions.filter((q) => q.difficulty === "Medium").length,
-    },
-    {
-      name: "Hard",
-      solved: questions.filter((q) => q.difficulty === "Hard" && q.isSolved)
-        .length,
-      total: questions.filter((q) => q.difficulty === "Hard").length,
-    },
-  ].filter((stat) => stat.total > 0);
+  const difficultyStats = stats.questionStatsCountDifficulties.map((d) => ({
+    name: d.name, // "Easy", "Medium", "Hard"
+    solved: d.solvedQuestions,
+    total: d.totalQuestions,
+    remaining: d.remQuestions,
+    progress:
+      d.totalQuestions > 0
+        ? Math.round((d.solvedQuestions / d.totalQuestions) * 100)
+        : 0,
+  }));
 
   const pieData = difficultyStats.map((stat) => ({
     name: stat.name,
@@ -99,23 +57,10 @@ export default function Dashboard() {
     total: stat.total,
   }));
 
-  const handleResetProgress = () => {
-    setResetConfirmOpen(true);
-  };
-
-  const confirmResetProgress = () => {
-    storage.resetAllQuestions();
-    setQuestions(storage.getQuestions());
-    toast({
-      title: "Progress Reset",
-      description: "All question progress has been reset successfully.",
-    });
-  };
-
   const COLORS = {
-    Easy: "#22c55e",
-    Medium: "#f59e0b",
-    Hard: "#ef4444",
+    EASY: "#22c55e",
+    MEDIUM: "#f59e0b",
+    HARD: "#ef4444",
   };
 
   return (
@@ -123,16 +68,6 @@ export default function Dashboard() {
       <Navigation />
 
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="text-center space-y-4 mb-8">
-          <h1 className="text-4xl font-bold gradient-text-primary">
-            DSA Progress Dashboard
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Track your Data Structures & Algorithms journey
-          </p>
-        </div>
-
         {/* Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="gradient-card border-0 glow-primary">
@@ -192,6 +127,8 @@ export default function Dashboard() {
           </Card>
         </div>
 
+        <Profile />
+
         {/* Charts and Statistics */}
         <Tabs defaultValue="topics" className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 bg-muted/50">
@@ -234,28 +171,90 @@ export default function Dashboard() {
               )}
 
               {/* Topic Progress Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 px-4">
-                {topicStats.map((topic) => (
-                  <Card key={topic.name} className="gradient-card border-0">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium">
-                        {topic.name}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span>Progress</span>
-                        <span className="font-medium">{topic.progress}%</span>
+              <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {stats?.questionStatsCountTopics?.map((topic) => {
+                  const progress =
+                    topic.totalQuestions > 0
+                      ? (topic.solvedQuestions / topic.totalQuestions) * 100
+                      : 0;
+
+                  return (
+                    <Card
+                      key={topic.id}
+                      className="p-6 rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 to-gray-950 hover:shadow-lg hover:shadow-primary/10 transition-all"
+                    >
+                      {/* Topic header */}
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-semibold text-lg text-gray-100">
+                          {topic.name}
+                        </h3>
+                        <span className="text-sm px-3 py-1 rounded-full bg-gray-800 text-gray-300">
+                          {topic.solvedQuestions}/{topic.totalQuestions}
+                        </span>
                       </div>
-                      <Progress value={topic.progress} className="h-2" />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{topic.solved} solved</span>
-                        <span>{topic.total} total</span>
+
+                      {/* Progress bar */}
+                      <div className="mb-4">
+                        <Progress
+                          value={progress}
+                          className="h-2 rounded-full bg-gray-800 [&>div]:bg-primary"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          {progress.toFixed(0)}% complete
+                        </p>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+
+                      {/* Solved / Remaining info */}
+                      <div className="flex justify-between text-sm mb-4">
+                        <span className="flex items-center gap-1 text-green-400 font-medium">
+                          <CheckCircle size={14} /> {topic.solvedQuestions}{" "}
+                          solved
+                        </span>
+                        <span className="flex items-center gap-1 text-red-400 font-medium">
+                          <XCircle size={14} /> {topic.remQuestions} remaining
+                        </span>
+                      </div>
+
+                      {/* Difficulty breakdown */}
+                      <div className="space-y-2">
+                        {topic.questionStatsCountDifficulties?.map((d) => {
+                          const dProgress =
+                            d.totalQuestions > 0
+                              ? (d.solvedQuestions / d.totalQuestions) * 100
+                              : 0;
+
+                          const colors: Record<string, string> = {
+                            Easy: "text-green-400",
+                            Medium: "text-yellow-400",
+                            Hard: "text-red-400",
+                          };
+
+                          return (
+                            <div key={d.name} className="space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span
+                                  className={`text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 ${
+                                    colors[d.name]
+                                  }`}
+                                >
+                                  {d.name}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {d.solvedQuestions}/{d.totalQuestions}
+                                </span>
+                              </div>
+                              <Progress
+                                value={dProgress}
+                                className="h-1.5 rounded-full [&>div]:bg-current"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </CardContent>
             </Card>
           </TabsContent>
 
@@ -270,18 +269,19 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   {pieData.length > 0 ? (
-                    <div className="w-full h-[300px] flex items-center justify-center">
-                      <ChartContainer config={{}} className="w-full h-full">
+                    <div className="w-full h-[280px] flex flex-col items-center justify-center">
+                      <ChartContainer
+                        config={{}}
+                        className="w-full h-[220px] bg-gray-900 rounded-lg p-2"
+                      >
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
                               data={pieData}
                               cx="50%"
                               cy="50%"
-                              outerRadius={80}
-                              fill="#8884d8"
+                              outerRadius={90}
                               dataKey="value"
-                              label={({ name, value }) => `${name}: ${value}`}
                             >
                               {pieData.map((entry, index) => (
                                 <Cell
@@ -289,16 +289,56 @@ export default function Dashboard() {
                                   fill={
                                     COLORS[entry.name as keyof typeof COLORS]
                                   }
+                                  stroke="#1f2937" // dark stroke to separate slices
                                 />
                               ))}
                             </Pie>
-                            <ChartTooltip content={<ChartTooltipContent />} />
+                            <ChartTooltip
+                              content={<ChartTooltipContent />}
+                              cursor={{ fill: "rgba(255,255,255,0.1)" }}
+                            />
                           </PieChart>
                         </ResponsiveContainer>
                       </ChartContainer>
+
+                      {/* Legend */}
+                      <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
+                        {pieData.map((entry) => {
+                          const total = pieData.reduce(
+                            (sum, e) => sum + e.value,
+                            0
+                          );
+                          const percentage =
+                            total > 0
+                              ? ((entry.value / total) * 100).toFixed(0)
+                              : 0;
+
+                          return (
+                            <div
+                              key={entry.name}
+                              className="flex items-center gap-2"
+                            >
+                              <span
+                                className="w-3 h-3 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    COLORS[entry.name as keyof typeof COLORS],
+                                }}
+                              />
+                              <span className="text-gray-200">
+                                {entry.name}:{" "}
+                                <span className="font-semibold">
+                                  {entry.value}
+                                </span>{" "}
+                                ({percentage}%)
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-gray-400">
                       No questions added yet
                     </div>
                   )}
@@ -359,15 +399,6 @@ export default function Dashboard() {
                     <Trophy className="h-5 w-5 text-primary" />
                     Overall Statistics
                   </span>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleResetProgress}
-                    className="glow-accent"
-                  >
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    Reset Progress
-                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -408,17 +439,17 @@ export default function Dashboard() {
                   <Progress value={overallProgress} className="h-3" />
                 </div>
 
-                {uniqueTopics.length > 0 && (
+                {topicStats.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="font-medium">Topics Covered</h4>
                     <div className="flex flex-wrap gap-2">
-                      {uniqueTopics.map((topicName) => (
+                      {topicStats.map((topic) => (
                         <Badge
-                          key={topicName}
+                          key={topic.id}
                           variant="secondary"
                           className="bg-primary/10 text-primary"
                         >
-                          {topicName}
+                          {topic.name}
                         </Badge>
                       ))}
                     </div>
@@ -429,17 +460,6 @@ export default function Dashboard() {
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* Confirmation Dialog */}
-      <ConfirmationDialog
-        open={resetConfirmOpen}
-        onOpenChange={setResetConfirmOpen}
-        title="Reset All Progress"
-        description="Are you sure you want to reset all progress? This will mark all questions as unsolved but preserve your notes."
-        confirmText="Reset Progress"
-        variant="destructive"
-        onConfirm={confirmResetProgress}
-      />
     </div>
   );
 }

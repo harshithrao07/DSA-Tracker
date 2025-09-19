@@ -19,16 +19,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Navigation } from "@/components/navigation";
-import { NotesDialog } from "@/components/notes-dialog";
-import { ConfirmationDialog } from "@/components/confirmation-dialog";
-import { storage } from "@/lib/storage";
 import {
   RefreshCw,
   RotateCcw,
-  NotebookPen,
-  CheckCircle,
   Bookmark,
   BookMarked,
+  CheckCircle2,
+  Circle,
+  NotebookPen,
+  Calendar,
+  ChevronDown,
+  History,
+  X,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -36,29 +39,25 @@ import axios from "axios";
 import { ApiResponse } from "@/types/response";
 import { QuestionResponse } from "@/types/question";
 import { Topic } from "@/types/topic";
+import { useStats } from "@/context/StatsContext";
+import { cn, formatDate } from "@/lib/utils";
+import { NotesDialog } from "@/components/notes-dialog";
 
 export default function HomePage() {
-  const [selectedTopic, setSelectedTopic] = useState<string>("all");
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>("all");
-  const [selectedRevision, setSelectedRevision] = useState<
-    "all" | "revision" | "normal"
-  >("all");
   const [questionCount, setQuestionCount] = useState<number>(1);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [currentQuestions, setCurrentQuestions] = useState<QuestionResponse[]>(
     []
   );
-  const [stats, setStats] = useState({
-    totalQuestions: 0,
-    solvedQuestions: 0,
-    topics: [],
-  });
+  const { stats, refreshStats } = useStats();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [expandedHistories, setExpandedHistories] = useState<string[]>([]);
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
-  const [selectedQuestionForNotes, setSelectedQuestionForNotes] =
+  const [selectedQuestion, setSelectedQuestion] =
     useState<QuestionResponse | null>(null);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useEffect(() => {
     async function fetchTopics() {
@@ -91,39 +90,99 @@ export default function HomePage() {
   useEffect(() => {
     const stored = localStorage.getItem("filters");
     if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (parsed.topic) setSelectedTopic(parsed.topic);
-        if (parsed.difficulty) setSelectedDifficulty(parsed.difficulty);
-        if (parsed.revision) setSelectedRevision(parsed.revision);
-        if (parsed.count) setQuestionCount(parsed.count);
-      } catch (err) {
-        console.error("Failed to parse stored filters", err);
-      }
+      const parsed = JSON.parse(stored);
+      if (parsed.topics) setSelectedTopics(parsed.topics);
+      if (parsed.difficulty) setSelectedDifficulty(parsed.difficulty);
+      if (parsed.count) setQuestionCount(parsed.count);
     }
   }, []);
 
   useEffect(() => {
-    const cached = localStorage.getItem("lastRandomQuestions");
-    if (cached) {
+    const fetchQuestions = async () => {
+      const cached = localStorage.getItem("lastRandomQuestions");
+      if (!cached) return;
+
       try {
         const parsed: QuestionResponse[] = JSON.parse(cached);
-        if (parsed.length) {
-          setCurrentQuestions(parsed);
+        if (!parsed.length) return;
+
+        const ids = parsed.map((q) => q.id);
+
+        const result = await axios.post<ApiResponse<QuestionResponse[]>>(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/getQuestionsBasedOnIds`,
+          { questionsIds: ids },
+          { withCredentials: true }
+        );
+
+        if (!result.data.success || !result.data.data) {
+          console.error("Failed to fetch questions", result.data.errorMessage);
+          return;
         }
+
+        // put API results in a map for quick lookup
+        const dataMap = new Map(result.data.data.map((q) => [q.id, q]));
+
+        // preserve order based on cached ids
+        const ordered = ids
+          .map((id) => dataMap.get(id))
+          .filter((q): q is QuestionResponse => !!q);
+
+        // filter out solved
+        const unsolvedOnly = ordered.filter((q) => !q.solved);
+
+        setCurrentQuestions(unsolvedOnly);
+
+        localStorage.setItem(
+          "lastRandomQuestions",
+          JSON.stringify(unsolvedOnly)
+        );
       } catch (err) {
-        console.error("Failed to parse cached questions", err);
+        console.error("Failed to fetch cached questions", err);
       }
-    }
+    };
+
+    fetchQuestions();
   }, []);
+
+  useEffect(() => {
+    if (currentQuestions.length === 0) {
+      refreshStats();
+    }
+  }, [currentQuestions]);
+
+  const openNotesDialog = (question: QuestionResponse) => {
+    setSelectedQuestion(question);
+    setNotesDialogOpen(true);
+  };
+
+  // Function to add a topic to the selected topics
+  const addTopic = (topicName: string) => {
+    if (topicName && !selectedTopics.includes(topicName)) {
+      setSelectedTopics([...selectedTopics, topicName]);
+    }
+  };
+
+  // Function to remove a topic from the selected topics
+  const removeTopic = (topicName: string) => {
+    setSelectedTopics(selectedTopics.filter((topic) => topic !== topicName));
+  };
+
+  // Function to clear all selected topics
+  const clearAllTopics = () => {
+    setSelectedTopics([]);
+  };
+
+  // Get available topics for the dropdown (exclude already selected ones)
+  const availableTopics = topics.filter(
+    (topic) => !selectedTopics.includes(topic.name)
+  );
 
   const getRandomQuestions = async () => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
-        topics: selectedTopic === "all" ? "" : selectedTopic,
+        topics: selectedTopics.length ? selectedTopics.join(",") : "",
         difficulty: selectedDifficulty === "all" ? "" : selectedDifficulty,
-        revision: selectedRevision,
         count: questionCount.toString(),
       });
 
@@ -154,12 +213,12 @@ export default function HomePage() {
     }
 
     const filters = {
-      topic: selectedTopic,
+      topics: selectedTopics,
       difficulty: selectedDifficulty,
-      revision: selectedRevision,
       count: questionCount,
     };
     localStorage.setItem("filters", JSON.stringify(filters));
+
     setIsLoading(false);
   };
 
@@ -202,9 +261,18 @@ export default function HomePage() {
           variant: "default",
         });
       } else if (field === "reviseLater") {
-        setCurrentQuestions((prev) =>
-          prev.map((q) => (q.id === questionId ? result.data.data : q))
-        );
+        setCurrentQuestions((prev) => {
+          const updated = prev.map((q) =>
+            q.id === questionId ? result.data.data : q
+          );
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "lastRandomQuestions",
+              JSON.stringify(updated)
+            );
+          }
+          return updated;
+        });
 
         toast({
           title: `Question updated`,
@@ -223,45 +291,64 @@ export default function HomePage() {
     }
   };
 
-  const resetAllProgress = () => {
-    setResetConfirmOpen(true);
-  };
-
-  const confirmResetProgress = () => {
-    storage.resetAllQuestions();
-    setCurrentQuestions([]);
-  };
-
-  const handleNotesUpdated = () => {
-    // if (selectedQuestionForNotes) {
-    //   const updatedQuestions = storage.getQuestions();
-    //   const updatedQuestion = updatedQuestions.find(
-    //     (q) => q.id === selectedQuestionForNotes.id
-    //   );
-    //   if (updatedQuestion) {
-    //     setCurrentQuestions((prev) =>
-    //       prev.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q))
-    //     );
-    //     setSelectedQuestionForNotes(updatedQuestion);
-    //   }
-    // }
-  };
-
-  const openNotesDialog = (question: QuestionResponse) => {
-    setSelectedQuestionForNotes(question);
-    setNotesDialogOpen(true);
+  const toggleSolveHistory = (questionId: string) => {
+    setExpandedHistories((prev) =>
+      prev.includes(questionId)
+        ? prev.filter((id) => id !== questionId)
+        : [...prev, questionId]
+    );
   };
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
-      case "Easy":
+      case "EASY":
         return "bg-green-500/20 text-green-400 border-green-500/30";
-      case "Medium":
+      case "MEDIUM":
         return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-      case "Hard":
+      case "HARD":
         return "bg-red-500/20 text-red-400 border-red-500/30";
       default:
         return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+    }
+  };
+
+  const confirmResetProgress = async () => {
+    try {
+      const result = await axios.get<ApiResponse<boolean>>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/user/reset-progress`,
+        {
+          withCredentials: true,
+        }
+      );
+
+      if (!result.data.success) {
+        console.error(
+          "Error resetting questions progress. ",
+          result.data.errorMessage
+        );
+        toast({
+          title: "Progress Reset",
+          description: "Error resetting questions progress.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (result.data.data) {
+        toast({
+          title: "Progress Reset",
+          description: "All question progress has been reset successfully.",
+        });
+
+        refreshStats();
+      }
+    } catch (error) {
+      console.error("Error resetting questions progress. ", error);
+      toast({
+        title: "Progress Reset",
+        description: "Error resetting questions progress.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -321,96 +408,140 @@ export default function HomePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-4 items-end">
-              <div className="flex-1">
-                <label className="text-sm font-medium mb-2 block">Topic</label>
-                <Select value={selectedTopic} onValueChange={setSelectedTopic}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a topic" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Topics</SelectItem>
-                    {topics.map((topic) => (
-                      <SelectItem key={topic.id} value={topic.name}>
-                        {topic.name}
-                      </SelectItem>
+            <div className="space-y-4">
+              {/* Topics Section */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">Topics</label>
+
+                {/* Selected Topics Display */}
+                {selectedTopics.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3 p-3 bg-background/20 rounded-lg border border-white/10">
+                    {selectedTopics.map((topic) => (
+                      <Badge
+                        key={topic}
+                        className="px-3 py-1 bg-blue-500/20 text-blue-400 border-blue-500/30 text-sm flex items-center gap-2"
+                      >
+                        {topic}
+                        <button
+                          onClick={() => removeTopic(topic)}
+                          className="hover:text-blue-300 transition-colors"
+                          title="Remove topic"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
                     ))}
-                  </SelectContent>
-                </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={clearAllTopics}
+                      className="h-7 px-2 text-xs bg-transparent border-white/20 text-gray-400 hover:bg-white/10 hover:text-white"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                )}
+
+                {/* Topic Selector */}
+                <div className="flex gap-2">
+                  <Select
+                    value=""
+                    onValueChange={addTopic}
+                    disabled={availableTopics.length === 0}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue
+                        placeholder={
+                          availableTopics.length === 0
+                            ? "All topics selected"
+                            : selectedTopics.length === 0
+                            ? "Select topics"
+                            : "Add another topic"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTopics.length > 0 ? (
+                        availableTopics.map((topic) => (
+                          <SelectItem key={topic.id} value={topic.name}>
+                            <div className="flex items-center gap-2">
+                              <Plus className="h-4 w-4" />
+                              {topic.name}
+                            </div>
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-sm text-gray-400">
+                          No more topics available
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedTopics.length === 0 && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    No topics selected - will search all topics
+                  </p>
+                )}
               </div>
 
-              <div className="flex-1">
-                <label className="text-sm font-medium mb-2 block">
-                  Difficulty
-                </label>
-                <Select
-                  value={selectedDifficulty}
-                  onValueChange={setSelectedDifficulty}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select difficulty" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Difficulties</SelectItem>
-                    <SelectItem value="Easy">Easy</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="Hard">Hard</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Difficulty and Questions Row */}
+              <div className="flex gap-4 items-end">
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-2 block">
+                    Difficulty
+                  </label>
+                  <Select
+                    value={selectedDifficulty}
+                    onValueChange={setSelectedDifficulty}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select difficulty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Difficulties</SelectItem>
+                      <SelectItem value="Easy">Easy</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="Hard">Hard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="flex-1">
-                <label className="text-sm font-medium mb-2 block">
-                  Revision
-                </label>
-                {/* <Select
-                  value={selectedRevision}
-                  onValueChange={setSelectedRevision}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Revision filter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Questions</SelectItem>
-                    <SelectItem value="revision">
-                      Marked for Revision
-                    </SelectItem>
-                    <SelectItem value="normal">Not Marked</SelectItem>
-                  </SelectContent>
-                </Select> */}
-              </div>
-
-              <div className="w-32">
-                <label className="text-sm font-medium mb-2 block">
-                  Questions
-                </label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={questionCount}
-                  onChange={(e) =>
-                    setQuestionCount(
-                      Math.max(
-                        1,
-                        Math.min(50, Number.parseInt(e.target.value) || 1)
+                <div className="w-32">
+                  <label className="text-sm font-medium mb-2 block">
+                    Questions
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={questionCount}
+                    onChange={(e) =>
+                      setQuestionCount(
+                        Math.max(
+                          1,
+                          Math.min(50, Number.parseInt(e.target.value) || 1)
+                        )
                       )
-                    )
-                  }
-                  className="text-center"
-                />
-              </div>
+                    }
+                    className="text-center"
+                  />
+                </div>
 
-              <Button
-                onClick={getRandomQuestions}
-                disabled={isLoading || stats.totalQuestions === 0}
-                className="gradient-primary text-white border-0 glow-primary hover:glow-accent transition-all duration-300"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-                />
-                Get Questions
-              </Button>
+                <Button
+                  onClick={getRandomQuestions}
+                  disabled={isLoading || stats.totalQuestions === 0}
+                  className="gradient-primary text-white border-0 glow-primary hover:glow-accent transition-all duration-300"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 mr-2 ${
+                      isLoading ? "animate-spin" : ""
+                    }`}
+                  />
+                  Get Questions
+                </Button>
+              </div>
             </div>
 
             {stats.totalQuestions === 0 && (
@@ -443,167 +574,199 @@ export default function HomePage() {
             {currentQuestions.map((question, index) => (
               <Card
                 key={question.id}
-                className="gradient-card border-0 glow-accent"
+                className={cn(
+                  "transition-all hover:shadow-lg rounded-2xl bg-background/40 backdrop-blur-md border border-white/10",
+                  question.solved && "border-green-500/30 bg-green-950/20"
+                )}
               >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-2">
-                      <CardTitle className="text-xl gradient-text-primary">
-                        {index + 1}.{" "}
-                        <Link
-                          href={question.link}
-                          target="_blank"
-                          className="cursor-pointer"
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 space-y-3">
+                      {/* Title and Status */}
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={() =>
+                            updateQuestionField(
+                              question.id,
+                              "solved",
+                              !question.solved
+                            )
+                          }
+                          className={cn(
+                            "mt-1 cursor-pointer transition-colors",
+                            question.solved
+                              ? "text-green-500 hover:text-green-400"
+                              : "text-gray-500 hover:text-gray-300"
+                          )}
+                          title={
+                            question.solved
+                              ? "Mark as unsolved"
+                              : "Mark as solved"
+                          }
                         >
-                          {question.title}
-                        </Link>
-                      </CardTitle>
-                      <div className="flex gap-2">
-                        {question.topics.map((topic, topicIndex) => (
+                          {question.solved ? (
+                            <CheckCircle2 className="h-5 w-5" />
+                          ) : (
+                            <Circle className="h-5 w-5" />
+                          )}
+                        </button>
+
+                        <div className="flex-1">
+                          {question.link ? (
+                            <Link
+                              href={question.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={cn(
+                                "text-lg font-semibold hover:text-blue-400 transition-colors cursor-pointer",
+                                question.solved
+                                  ? "line-through text-gray-500"
+                                  : "text-white"
+                              )}
+                            >
+                              {question.title}
+                            </Link>
+                          ) : (
+                            <h3
+                              className={cn(
+                                "text-lg font-semibold",
+                                question.solved
+                                  ? "line-through text-gray-500"
+                                  : "text-white"
+                              )}
+                            >
+                              {question.title}
+                            </h3>
+                          )}
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openNotesDialog(question)}
+                          className="flex cursor-pointer items-center gap-2 bg-background/40 backdrop-blur-sm border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+                          title={
+                            question.noteId ? "View/Edit Notes" : "Add Notes"
+                          }
+                        >
+                          <NotebookPen className="h-4 w-4" />
+                          {question.noteId ? "View/Edit Notes" : "Add Notes"}
+                        </Button>
+                      </div>
+
+                      {/* Badges */}
+                      <div className="flex flex-wrap gap-2 ml-8">
+                        {(question.topics || []).map((topic, index) => (
                           <Badge
-                            key={topicIndex}
-                            variant="secondary"
-                            className="gradient-secondary text-white border-0"
+                            key={index}
+                            className="px-2 py-1 bg-background/30 backdrop-blur-sm border border-white/10 text-gray-300 text-xs"
                           >
                             {topic}
                           </Badge>
                         ))}
                         <Badge
-                          className={getDifficultyColor(question.difficulty)}
+                          className={cn(
+                            "px-2 py-1 text-xs bg-background/30 backdrop-blur-sm border border-white/10",
+                            getDifficultyColor(question.difficulty)
+                          )}
                         >
-                          {question.difficulty}
+                          {question.difficulty.charAt(0).toUpperCase() +
+                            question.difficulty.slice(1).toLowerCase()}
                         </Badge>
+                        {question.solved && (
+                          <Badge className="px-2 py-1 bg-green-900/40 text-green-400 border-green-500/30 text-xs">
+                            ✓ Solved
+                          </Badge>
+                        )}
+                        {question.reviseLater && (
+                          <Badge className="px-2 py-1 bg-orange-900/40 text-orange-400 border-orange-500/30 text-xs">
+                            Revision
+                          </Badge>
+                        )}
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        Added on{" "}
-                        {new Intl.DateTimeFormat("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        }).format(new Date(question.createdAt))}
+
+                      {/* Dates & Solve History */}
+                      <div className="ml-8 space-y-2">
+                        <div className="flex items-center gap-4 text-sm text-gray-400">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-4 w-4" />
+                            Added {formatDate(question.createdAt)}
+                          </div>
+                          {question.solveHistory?.length > 0 && (
+                            <button
+                              onClick={() => toggleSolveHistory(question.id)}
+                              className="flex items-center gap-1 cursor-pointer text-green-400 hover:text-green-300 transition-colors"
+                              title="View solve history"
+                            >
+                              <History className="h-4 w-4" />
+                              <span>
+                                {question.solveHistory.length} solve
+                                {question.solveHistory.length !== 1 ? "s" : ""}
+                              </span>
+                              <ChevronDown
+                                className={cn(
+                                  "h-4 w-4 transition-transform",
+                                  expandedHistories?.includes(question.id) &&
+                                    "rotate-180"
+                                )}
+                              />
+                            </button>
+                          )}
+                        </div>
+
+                        {question.solveHistory?.length > 0 &&
+                          expandedHistories?.includes(question.id) && (
+                            <div className="mt-3 pl-4 border-l-2 border-white/10 space-y-2">
+                              <div className="text-xs font-medium text-gray-300 mb-2">
+                                Solved Timeline
+                              </div>
+                              {question.solveHistory.map((date, index) => (
+                                <div
+                                  key={index}
+                                  className="flex items-center gap-2 text-sm"
+                                >
+                                  <div className="w-2 h-2 bg-green-500 rounded-full -ml-[5px]" />
+                                  <span className="text-gray-400">
+                                    Solved on {formatDate(date)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                       </div>
                     </div>
-                    {/* <div className="flex gap-2">
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => openNotesDialog(question)}
-                        className="hover:gradient-primary hover:text-white transition-all duration-300 bg-transparent flex items-center gap-2"
-                        title={question.notes ? "View/Edit Notes" : "Add Notes"}
+                        onClick={() =>
+                          updateQuestionField(
+                            question.id,
+                            "reviseLater",
+                            !question.reviseLater
+                          )
+                        }
+                        className={cn(
+                          "flex cursor-pointer items-center gap-2 transition-colors bg-background/40 backdrop-blur-sm border border-white/10 text-gray-300 hover:bg-white/10 hover:text-orange-400",
+                          question.reviseLater &&
+                            "bg-orange-900/30 border-orange-700/50 text-orange-400"
+                        )}
+                        title={
+                          question.reviseLater
+                            ? "Remove from revise later"
+                            : "Mark for revision"
+                        }
                       >
-                        <NotebookPen className="h-4 w-4" />
-                        {question.notes ? "Notes" : "Add Notes"}
+                        {question?.reviseLater ? (
+                          <BookMarked className="h-4 w-4" />
+                        ) : (
+                          <Bookmark className="h-4 w-4" />
+                        )}
+                        {question.reviseLater ? "Marked" : "Mark"}
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setCurrentQuestions((prev) => {
-                            const updated = prev.filter(
-                              (q) => q.id !== question.id
-                            );
-                            // also update localStorage cache
-                            if (typeof window !== "undefined") {
-                              localStorage.setItem(
-                                "lastRandomQuestions",
-                                JSON.stringify(updated)
-                              );
-                            }
-                            return updated;
-                          });
-
-                          toast({
-                            title: "Skipped Question from practice",
-                          });
-                        }}
-                        className="hover:gradient-primary hover:text-white transition-all duration-300 bg-transparent"
-                      >
-                        Skip
-                      </Button>
-                    </div> */}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() =>
-                        updateQuestionField(
-                          question.id,
-                          "solved",
-                          !question.solved
-                        )
-                      }
-                      className="gradient-primary text-white border-0 glow-primary hover:glow-accent transition-all duration-300 flex items-center gap-2"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                      Mark as Solved
-                    </Button>
-
-                    <CardContent className="space-y-4">
-                      <div className="flex gap-2">
-                        {(() => {
-                          const current = currentQuestions.find(
-                            (q) => q.id === question.id
-                          );
-
-                          return (
-                            <Button
-                              onClick={() => {
-                                const updatedQuestion =
-                                  storage.toggleReviseLater(question.id);
-
-                                // setCurrentQuestions((prev) => {
-                                //   const updated = prev.map((q) =>
-                                //     q.id === question.id
-                                //       ? {
-                                //           ...q,
-                                //           reviseLater:
-                                //             updatedQuestion.reviseLater,
-                                //         }
-                                //       : q
-                                //   );
-
-                                //   // also update localStorage cache
-                                //   if (typeof window !== "undefined") {
-                                //     localStorage.setItem(
-                                //       "lastRandomQuestions",
-                                //       JSON.stringify(updated)
-                                //     );
-                                //   }
-
-                                //   return updated;
-                                // });
-
-                                // ✅ Show correct toast based on new state
-                                toast({
-                                  title: updatedQuestion.reviseLater
-                                    ? "Marked for Revision"
-                                    : "Removed from Revision",
-                                  description: updatedQuestion.reviseLater
-                                    ? "Question added to your revision list."
-                                    : "Question removed from your revision list.",
-                                });
-                              }}
-                              className={`gradient-secondary text-white border-0 glow-secondary hover:glow-accent transition-all duration-300 flex items-center gap-2 ${
-                                current?.reviseLater
-                                  ? "opacity-100"
-                                  : "opacity-70"
-                              }`}
-                            >
-                              {/* ✅ Show tick when marked, repeat otherwise */}
-                              {current?.reviseLater ? (
-                                <BookMarked className="h-4 w-4" />
-                              ) : (
-                                <Bookmark className="h-4 w-4" />
-                              )}
-                              {current?.reviseLater
-                                ? "Marked for Revision"
-                                : "Mark for Revision"}
-                            </Button>
-                          );
-                        })()}
-                      </div>
-                    </CardContent>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -641,7 +804,7 @@ export default function HomePage() {
                 {stats.solvedQuestions > 0 && (
                   <div className="text-center">
                     <Button
-                      onClick={resetAllProgress}
+                      onClick={confirmResetProgress}
                       variant="outline"
                       className="gradient-hover text-white border-0 glow-primary bg-transparent"
                     >
@@ -654,29 +817,13 @@ export default function HomePage() {
             </Card>
           )}
       </div>
-
-      {/* Notes Dialog Component */}
-      {/* {selectedQuestionForNotes && (
+      {selectedQuestion && (
         <NotesDialog
-          questionId={selectedQuestionForNotes.id}
-          questionTitle={selectedQuestionForNotes.title}
-          currentNotes={selectedQuestionForNotes.notes}
+          selectedQuestion={selectedQuestion}
           open={notesDialogOpen}
           onOpenChange={setNotesDialogOpen}
-          onNotesUpdated={handleNotesUpdated}
         />
-      )} */}
-
-      {/* Confirmation Dialog */}
-      <ConfirmationDialog
-        open={resetConfirmOpen}
-        onOpenChange={setResetConfirmOpen}
-        title="Reset All Progress"
-        description="Are you sure you want to reset all progress? This will mark all questions as unsolved but preserve your notes."
-        confirmText="Reset Progress"
-        variant="destructive"
-        onConfirm={confirmResetProgress}
-      />
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { UserProvider } from "@/context/UserContext";
+import { StatsProvider } from "@/context/StatsContext";
 
 export const metadata: Metadata = {
   title: "DSA Tracker",
@@ -28,7 +29,9 @@ html {
         `}</style>
       </head>
       <body className="min-h-screen bg-background text-foreground">
-        <UserProvider>{children}</UserProvider>
+        <UserProvider>
+          <StatsProvider>{children}</StatsProvider>
+        </UserProvider>
         <Toaster />
       </body>
     </html>

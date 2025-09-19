@@ -28,6 +28,9 @@ import {
   Bookmark,
   ChevronDown,
   History,
+  X,
+  Plus,
+  Check,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ApiResponse } from "@/types/response";
@@ -36,41 +39,171 @@ import axios from "axios";
 import { Topic } from "@/types/topic";
 import { useDebounce } from "@/hooks/use-debounce";
 import Link from "next/link";
+import { formatDate } from "@/lib/utils";
 
-export default function ProblemsPage() {
+// Multi-Select Topic Component Props Interface
+interface MultiTopicSelectorProps {
+  topics: Topic[];
+  selectedTopics: string[];
+  onTopicsChange: (topics: string[]) => void;
+  className?: string;
+}
+
+// Multi-Select Topic Component
+const MultiTopicSelector: React.FC<MultiTopicSelectorProps> = ({ 
+  topics, 
+  selectedTopics, 
+  onTopicsChange, 
+  className = "" 
+}) => {
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  
+  const filteredTopics = topics.filter((topic: Topic) =>
+    topic.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const toggleTopic = (topicName: string): void => {
+    const updatedTopics = selectedTopics.includes(topicName)
+      ? selectedTopics.filter((t: string) => t !== topicName)
+      : [...selectedTopics, topicName];
+    onTopicsChange(updatedTopics);
+  };
+
+  const removeTopic = (topicName: string, e: React.MouseEvent): void => {
+    e.stopPropagation();
+    onTopicsChange(selectedTopics.filter((t: string) => t !== topicName));
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      <div
+        className="min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex flex-wrap gap-1">
+          {selectedTopics.length === 0 ? (
+            <span className="text-muted-foreground">Select topics...</span>
+          ) : (
+            selectedTopics.map((topic: string) => (
+              <Badge
+                key={topic}
+                variant="secondary"
+                className="text-xs flex items-center gap-1"
+              >
+                {topic}
+                <X
+                  className="h-3 w-3 hover:text-red-400 cursor-pointer"
+                  onClick={(e) => removeTopic(topic, e)}
+                />
+              </Badge>
+            ))
+          )}
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg">
+          <div className="p-2">
+            <Input
+              placeholder="Search topics..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-8"
+            />
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {selectedTopics.length > 0 && (
+              <div className="px-2 py-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-full justify-start text-xs text-muted-foreground"
+                  onClick={() => onTopicsChange([])}
+                >
+                  Clear all selections
+                </Button>
+              </div>
+            )}
+            {filteredTopics.map((topic: Topic) => (
+              <div
+                key={topic.id}
+                className="flex items-center px-2 py-1 hover:bg-accent cursor-pointer"
+                onClick={() => toggleTopic(topic.name)}
+              >
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 border rounded-sm flex items-center justify-center">
+                    {selectedTopics.includes(topic.name) && (
+                      <Check className="h-3 w-3 text-primary" />
+                    )}
+                  </div>
+                  <span className="text-sm">{topic.name}</span>
+                </div>
+              </div>
+            ))}
+            {filteredTopics.length === 0 && searchTerm && (
+              <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                No topics found
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// Stats Interface
+interface Stats {
+  totalQuestions: number;
+  solvedQuestions: number;
+  remQuestions: number;
+}
+
+// Confirmation Dialog State Interface
+interface ConfirmationDialogState {
+  open: boolean;
+  title: string;
+  description: string;
+  onConfirm: () => void;
+}
+
+// Main Component
+const ProblemsPage: React.FC = () => {
   const { toast } = useToast();
   const [questions, setQuestions] = useState<QuestionResponse[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Stats>({
     totalQuestions: 0,
     solvedQuestions: 0,
     remQuestions: 0,
   });
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTopic, setSelectedTopic] = useState("all");
-  const [selectedDifficulty, setSelectedDifficulty] = useState("all");
-  const [selectedStatus, setSelectedStatus] = useState("all");
-  const [sortBy, setSortBy] = useState("newest");
-  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
-  const [selectedQuestion, setSelectedQuestion] =
-    useState<QuestionResponse | null>(null);
+  const [page, setPage] = useState<number>(0);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [notesDialogOpen, setNotesDialogOpen] = useState<boolean>(false);
+  const [selectedQuestion, setSelectedQuestion] = useState<QuestionResponse | null>(null);
   const [expandedHistories, setExpandedHistories] = useState<string[]>([]);
-  const [confirmationDialog, setConfirmationDialog] = useState<{
-    open: boolean;
-    title: string;
-    description: string;
-    onConfirm: () => void;
-  }>({
+  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogState>({
     open: false,
     title: "",
     description: "",
     onConfirm: () => {},
   });
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
-  const [infiniteLoading, setInfiniteLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(true);
+  const [infiniteLoading, setInfiniteLoading] = useState<boolean>(true);
+  const [hasMore, setHasMore] = useState<boolean>(true);
 
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
@@ -80,7 +213,7 @@ export default function ProblemsPage() {
     page,
     pageSize,
     debouncedSearchTerm,
-    selectedTopic,
+    selectedTopics, // Updated dependency
     selectedDifficulty,
     selectedStatus,
     sortBy,
@@ -94,14 +227,14 @@ export default function ProblemsPage() {
     fetchQuestions();
   }, [
     debouncedSearchTerm,
-    selectedTopic,
+    selectedTopics, // Updated dependency
     selectedDifficulty,
     selectedStatus,
     sortBy,
   ]);
 
   useEffect(() => {
-    async function fetchTopics() {
+    async function fetchTopics(): Promise<void> {
       try {
         const result = await axios.get<ApiResponse<Topic[]>>(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/topics`,
@@ -144,7 +277,7 @@ export default function ProblemsPage() {
     };
   }, [infiniteLoading, hasMore]);
 
-  async function fetchQuestions() {
+  async function fetchQuestions(): Promise<void> {
     page !== 0 && setInfiniteLoading(true);
 
     try {
@@ -171,7 +304,7 @@ export default function ProblemsPage() {
         page: page.toString(),
         pageSize: pageSize.toString(),
         key: debouncedSearchTerm.trim(),
-        topics: selectedTopic === "all" ? "" : selectedTopic,
+        topics: selectedTopics.length === 0 ? "" : selectedTopics.join(","), // Join multiple topics
         difficulty: selectedDifficulty === "all" ? "" : selectedDifficulty,
         status: selectedStatus === "all" ? "" : selectedStatus,
         sortBy: apiSortBy,
@@ -238,7 +371,7 @@ export default function ProblemsPage() {
     }
   }
 
-  const deleteQuestion = (questionId: string, title: string) => {
+  const deleteQuestion = (questionId: string, title: string): void => {
     setConfirmationDialog({
       open: true,
       title: "Delete Question",
@@ -258,9 +391,23 @@ export default function ProblemsPage() {
             return;
           }
 
-          setQuestions((prevQuestion) =>
-            prevQuestion.filter((quest) => quest.id != questionId)
-          );
+          setQuestions((prevQuestion) => {
+            const updated = prevQuestion.filter(
+              (quest) => quest.id !== questionId
+            );
+
+            const stored = localStorage.getItem("lastRandomQuestions");
+            if (stored) {
+              const parsed: QuestionResponse[] = JSON.parse(stored);
+              const updatedStored = parsed.filter((q) => q.id !== questionId);
+              localStorage.setItem(
+                "lastRandomQuestions",
+                JSON.stringify(updatedStored)
+              );
+            }
+
+            return updated;
+          });
 
           toast({
             title: "Question deleted",
@@ -282,7 +429,7 @@ export default function ProblemsPage() {
     questionId: string,
     field: "solved" | "reviseLater",
     value: boolean
-  ) => {
+  ): Promise<void> => {
     try {
       const result = await axios.put<ApiResponse<QuestionResponse>>(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/${questionId}`,
@@ -299,9 +446,23 @@ export default function ProblemsPage() {
         return;
       }
 
+      const updatedQuestion = result.data.data;
+
       setQuestions((prev) =>
-        prev.map((q) => (q.id === questionId ? result.data.data : q))
+        prev.map((q) => (q.id === questionId ? updatedQuestion : q))
       );
+
+      const stored = localStorage.getItem("lastRandomQuestions");
+      if (stored) {
+        const parsed: QuestionResponse[] = JSON.parse(stored);
+        const updatedStored = parsed.map((q) =>
+          q.id === questionId ? updatedQuestion : q
+        );
+        localStorage.setItem(
+          "lastRandomQuestions",
+          JSON.stringify(updatedStored)
+        );
+      }
 
       toast({
         title: `Question updated`,
@@ -324,21 +485,21 @@ export default function ProblemsPage() {
     }
   };
 
-  const openNotesDialog = (question: QuestionResponse) => {
+  const openNotesDialog = (question: QuestionResponse): void => {
     setSelectedQuestion(question);
     setNotesDialogOpen(true);
   };
 
-  const resetAllFilters = () => {
+  const resetAllFilters = (): void => {
     setSearchTerm("");
-    setSelectedTopic("all");
+    setSelectedTopics([]); // Reset to empty array
     setSelectedDifficulty("all");
     setSelectedStatus("all");
     setSortBy("newest");
     setPageSize(10);
   };
 
-  const toggleSolveHistory = (questionId: string) => {
+  const toggleSolveHistory = (questionId: string): void => {
     setExpandedHistories((prev) =>
       prev.includes(questionId)
         ? prev.filter((id) => id !== questionId)
@@ -346,7 +507,7 @@ export default function ProblemsPage() {
     );
   };
 
-  const getDifficultyColor = (difficulty: string) => {
+  const getDifficultyColor = (difficulty: string): string => {
     switch (difficulty) {
       case "EASY":
         return "bg-green-500/20 text-green-400 border-green-500/30";
@@ -357,17 +518,6 @@ export default function ProblemsPage() {
       default:
         return "bg-gray-500/20 text-gray-400 border-gray-500/30";
     }
-  };
-
-  const formatDate = (epochSeconds: number) => {
-    const millis = epochSeconds * 1000; // convert seconds → ms
-    return new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(millis));
   };
 
   return (
@@ -441,20 +591,12 @@ export default function ProblemsPage() {
                 </div>
               </div>
 
-              {/* Topic Filter */}
-              <Select value={selectedTopic} onValueChange={setSelectedTopic}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Topics" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Topics</SelectItem>
-                  {(topics || []).map((topic) => (
-                    <SelectItem key={topic.id} value={topic.name}>
-                      {topic.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Multi-Topic Filter */}
+              <MultiTopicSelector
+                topics={topics || []}
+                selectedTopics={selectedTopics}
+                onTopicsChange={setSelectedTopics}
+              />
 
               {/* Difficulty Filter */}
               <Select
@@ -497,6 +639,32 @@ export default function ProblemsPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Active Filters Display */}
+            {selectedTopics.length > 0 && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium">Active Topic Filters:</span>
+                  {selectedTopics.map((topic: string) => (
+                    <Badge
+                      key={topic}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      {topic}
+                    </Badge>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedTopics([])}
+                    className="text-xs h-6"
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -522,7 +690,7 @@ export default function ProblemsPage() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {(questions || []).map((question) => (
+            {(questions || []).map((question: QuestionResponse) => (
               <Card
                 key={question.id}
                 className={`transition-all hover:shadow-lg bg-[#0e0e0e] border-gray-800 ${
@@ -603,7 +771,7 @@ export default function ProblemsPage() {
 
                       {/* Badges */}
                       <div className="flex flex-wrap gap-2 ml-8">
-                        {(question.topics || []).map((topic, index) => (
+                        {(question.topics || []).map((topic: string, index: number) => (
                           <Badge
                             key={index}
                             variant="secondary"
@@ -672,7 +840,7 @@ export default function ProblemsPage() {
                               <div className="text-xs font-medium text-gray-300 mb-2">
                                 Solved Timeline
                               </div>
-                              {question.solveHistory.map((date, index) => (
+                              {question.solveHistory.map((date: number, index: number) => (
                                 <div
                                   key={index}
                                   className="flex items-center gap-2 text-sm"
@@ -748,7 +916,7 @@ export default function ProblemsPage() {
 
       <ConfirmationDialog
         open={confirmationDialog.open}
-        onOpenChange={(open) =>
+        onOpenChange={(open: boolean) =>
           setConfirmationDialog((prev) => ({ ...prev, open }))
         }
         title={confirmationDialog.title}
@@ -763,4 +931,6 @@ export default function ProblemsPage() {
       </div>
     </div>
   );
-}
+};
+
+export default ProblemsPage;
