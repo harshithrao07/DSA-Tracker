@@ -10,6 +10,9 @@ import { StatsProvider } from "@/context/StatsContext";
 export const metadata: Metadata = {
   title: "DSA Tracker",
   description: "Your personal DSA practice companion",
+  icons: {
+    icon: "/dsa-solver.png",
+  },
 };
 
 export default function RootLayout({
