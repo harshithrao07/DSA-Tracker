@@ -38,7 +38,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         withCredentials: true, // important to include cookies
       })
       .then((res) => setUser(res.data))
-      .catch(() => {
+      .catch((error) => {
+        console.log("get user:" + error)
         setUser(null);
         router.push("/login");
       })

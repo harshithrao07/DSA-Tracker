@@ -11,6 +11,7 @@ export function middleware(req: NextRequest) {
 
   // If no JSESSIONID -> redirect to login
   if (!jsessionId) {
+    console.log("no cookie present")
     return NextResponse.redirect(new URL("/login", req.url))
   }
 
