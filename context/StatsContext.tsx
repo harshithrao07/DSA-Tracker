@@ -35,22 +35,12 @@ export const StatsProvider = ({ children }: { children: ReactNode }) => {
 
       if (!result.data.success) {
         console.error("Error fetching stats:", result.data.errorMessage);
-        toast({
-          title: "Error",
-          description: "Failed to fetch question stats",
-          variant: "destructive",
-        });
         return;
       }
 
       setStats(result.data.data);
     } catch (error) {
       console.error("Error fetching stats:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch question stats",
-        variant: "destructive",
-      });
     }
   };
 

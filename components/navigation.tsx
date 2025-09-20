@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LogOut } from "lucide-react";
 import axios from "axios";
-import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
 import Image from "next/image";
 
@@ -18,7 +17,6 @@ const navItems = [
 
 export function Navigation() {
   const pathname = usePathname();
-  const { toast } = useToast();
   const { user, loading } = useUser();
 
   const handleLogout = async () => {
