@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Loader2, Github, Chrome } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/router";
 
 // OAuth providers mapped to Spring Boot OAuth2 endpoints
 const oauthProviders = [
@@ -31,6 +32,26 @@ const oauthProviders = [
 export default function LoginComponent() {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/me`,
+          { credentials: "include" }
+        );
+
+        if (res.ok) {
+          router.replace("/dashboard");
+        }
+      } catch (err) {
+        console.error("Auth check failed:", err);
+      }
+    };
+
+    checkAuth();
+  }, [router]);
 
   const handleOAuthLogin = async (providerId: string, providerName: string) => {
     setIsLoading(providerId);
