@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Loader2, Github, Chrome } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
 
 // OAuth providers mapped to Spring Boot OAuth2 endpoints
 const oauthProviders = [
