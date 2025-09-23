@@ -30,7 +30,8 @@ export function Navigation() {
           "Server logout successful. Manually deleting cookie on client."
         );
 
-        document.cookie = "token=; Path=/; Max-Age=0;";
+        document.cookie =
+          "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; SameSite=None;";
       }
     } catch (error) {
       console.warn("Logout gave error:", error);
