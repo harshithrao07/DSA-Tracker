@@ -27,10 +27,12 @@ import {
 import { Navigation } from "@/components/navigation";
 import Profile from "@/components/ProfileComponent";
 import { useStats } from "@/context/StatsContext";
+import { useEffect } from "react";
+import { useRouter } from "next/router";
 
 export default function Dashboard() {
   const { stats } = useStats();
-
+  const router = useRouter();
   const totalQuestions = stats.totalQuestions;
   const solvedQuestions = stats.solvedQuestions;
   const unsolvedQuestions = stats.remQuestions;
@@ -38,6 +40,17 @@ export default function Dashboard() {
     totalQuestions > 0 ? (solvedQuestions / totalQuestions) * 100 : 0;
 
   const topicStats = stats.questionStatsCountTopics;
+
+  useEffect(() => {
+    if (router.isReady) {
+      const token = router.query.token as string | undefined;
+
+      if (token) {
+        localStorage.setItem("token", token);
+        router.replace("/dashboard");
+      }
+    }
+  }, [router]);
 
   // Difficulty-wise statistics
   const difficultyStats = stats.questionStatsCountDifficulties.map((d) => ({

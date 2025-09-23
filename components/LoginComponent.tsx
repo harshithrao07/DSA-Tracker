@@ -36,17 +36,11 @@ export default function LoginComponent() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/user/me`,
-          { credentials: "include" }
-        );
+      const token = localStorage.getItem("token");
 
-        if (res.ok) {
-          router.replace("/dashboard");
-        }
-      } catch (err) {
-        console.error("Auth check failed:", err);
+      if (token) {
+        router.replace("/dashboard");
+        return;
       }
     };
 

@@ -21,19 +21,7 @@ export function Navigation() {
 
   const handleLogout = async () => {
     try {
-      const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/logout`
-      );
-
-      if (response.status === 200) {
-        console.log(
-          "Server logout successful. Manually deleting cookie on client."
-        );
-
-        const domain = "dsa-tracker-backend-tbmg.onrender.com";
-
-        document.cookie = `token=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure`;
-      }
+      localStorage.removeItem("token"); // remove token
     } catch (error) {
       console.warn("Logout gave error:", error);
     } finally {
