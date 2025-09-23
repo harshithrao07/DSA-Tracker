@@ -21,11 +21,15 @@ export function Navigation() {
 
   const handleLogout = async () => {
     try {
-      await axios.post(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/logout`,
-        {},
-        { withCredentials: true }
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/logout`
       );
+
+      if (response.status === 200) {
+        console.log(
+          "Server logout successful. Manually deleting cookie on client."
+        );
+      }
     } catch (error) {
       console.warn("Logout gave error:", error);
     } finally {

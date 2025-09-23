@@ -38,7 +38,7 @@ export default function LoginComponent() {
     const checkAuth = async () => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/me`,
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/user/me`,
           { credentials: "include" }
         );
 
@@ -57,8 +57,25 @@ export default function LoginComponent() {
     setIsLoading(providerId);
 
     try {
-      const backendUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/oauth2/authorization/${providerId}`;
-      window.location.href = backendUrl;
+      let authUrl = "";
+
+      if (providerId === "google") {
+        authUrl =
+          `https://accounts.google.com/o/oauth2/v2/auth` +
+          `?client_id=${process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}` +
+          `&redirect_uri=${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/google/callback` +
+          `&response_type=code&scope=profile email&access_type=offline`;
+      }
+
+      if (providerId === "github") {
+        authUrl =
+          `https://github.com/login/oauth/authorize` +
+          `?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}` +
+          `&redirect_uri=${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/github/callback` +
+          `&scope=read:user user:email`;
+      }
+
+      window.location.href = authUrl;
     } catch (error) {
       console.error(`[OAuth] Login error for ${providerId}:`, error);
       toast({
