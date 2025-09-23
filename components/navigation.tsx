@@ -30,8 +30,9 @@ export function Navigation() {
           "Server logout successful. Manually deleting cookie on client."
         );
 
-        document.cookie =
-          "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; SameSite=None;";
+        const domain = "dsa-tracker-backend-tbmg.onrender.com";
+
+        document.cookie = `token=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure`;
       }
     } catch (error) {
       console.warn("Logout gave error:", error);
