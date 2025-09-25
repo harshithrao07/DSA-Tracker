@@ -22,6 +22,21 @@ axios.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      if (typeof window !== "undefined") {
+        if (window.location.pathname !== "/login") {
+          localStorage.removeItem("token");
+          window.location.href = "/login";
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 type User = {
   pictureUrl: string | Blob | undefined;
   id: string;
