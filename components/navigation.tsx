@@ -21,7 +21,7 @@ export function Navigation() {
 
   const handleLogout = async () => {
     try {
-      localStorage.removeItem("token"); // remove token
+      localStorage.clear();
     } catch (error) {
       console.warn("Logout gave error:", error);
     } finally {
