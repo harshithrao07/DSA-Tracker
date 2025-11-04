@@ -31,6 +31,7 @@ import {
   X,
   Plus,
   Check,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ApiResponse } from "@/types/response";
@@ -50,15 +51,15 @@ interface MultiTopicSelectorProps {
 }
 
 // Multi-Select Topic Component
-const MultiTopicSelector: React.FC<MultiTopicSelectorProps> = ({ 
-  topics, 
-  selectedTopics, 
-  onTopicsChange, 
-  className = "" 
+const MultiTopicSelector: React.FC<MultiTopicSelectorProps> = ({
+  topics,
+  selectedTopics,
+  onTopicsChange,
+  className = "",
 }) => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
-  
+
   const filteredTopics = topics.filter((topic: Topic) =>
     topic.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -151,10 +152,7 @@ const MultiTopicSelector: React.FC<MultiTopicSelectorProps> = ({
       )}
 
       {isOpen && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setIsOpen(false)}
-        />
+        <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
       )}
     </div>
   );
@@ -193,17 +191,20 @@ const ProblemsPage: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("newest");
   const [notesDialogOpen, setNotesDialogOpen] = useState<boolean>(false);
-  const [selectedQuestion, setSelectedQuestion] = useState<QuestionResponse | null>(null);
+  const [selectedQuestion, setSelectedQuestion] =
+    useState<QuestionResponse | null>(null);
   const [expandedHistories, setExpandedHistories] = useState<string[]>([]);
-  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogState>({
-    open: false,
-    title: "",
-    description: "",
-    onConfirm: () => {},
-  });
+  const [confirmationDialog, setConfirmationDialog] =
+    useState<ConfirmationDialogState>({
+      open: false,
+      title: "",
+      description: "",
+      onConfirm: () => {},
+    });
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [infiniteLoading, setInfiniteLoading] = useState<boolean>(true);
   const [hasMore, setHasMore] = useState<boolean>(true);
+  const [updating, setUpdating] = useState<string | null>(null); // store questionId being updated
 
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
@@ -430,6 +431,9 @@ const ProblemsPage: React.FC = () => {
     field: "solved" | "reviseLater",
     value: boolean
   ): Promise<void> => {
+    if (updating === questionId) return;
+    setUpdating(questionId);
+
     try {
       const result = await axios.put<ApiResponse<QuestionResponse>>(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/${questionId}`,
@@ -482,6 +486,8 @@ const ProblemsPage: React.FC = () => {
         description: "Something went wrong updating the question",
         variant: "destructive",
       });
+    } finally {
+      setUpdating(null);
     }
   };
 
@@ -644,7 +650,9 @@ const ProblemsPage: React.FC = () => {
             {selectedTopics.length > 0 && (
               <div className="mt-4 pt-4 border-t">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium">Active Topic Filters:</span>
+                  <span className="text-sm font-medium">
+                    Active Topic Filters:
+                  </span>
                   {selectedTopics.map((topic: string) => (
                     <Badge
                       key={topic}
@@ -706,12 +714,14 @@ const ProblemsPage: React.FC = () => {
                       <div className="flex items-start gap-3">
                         <button
                           onClick={() =>
+                            !updating &&
                             updateQuestionField(
                               question.id,
                               "solved",
                               !question.solved
                             )
                           }
+                          disabled={updating === question.id}
                           className={`mt-1 cursor-pointer transition-colors ${
                             question.solved
                               ? "text-green-500 hover:text-green-400"
@@ -723,7 +733,9 @@ const ProblemsPage: React.FC = () => {
                               : "Mark as solved"
                           }
                         >
-                          {question.solved ? (
+                          {updating === question.id ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : question.solved ? (
                             <CheckCircle2 className="h-5 w-5" />
                           ) : (
                             <Circle className="h-5 w-5" />
@@ -771,15 +783,17 @@ const ProblemsPage: React.FC = () => {
 
                       {/* Badges */}
                       <div className="flex flex-wrap gap-2 ml-8">
-                        {(question.topics || []).map((topic: string, index: number) => (
-                          <Badge
-                            key={index}
-                            variant="secondary"
-                            className="px-2 py-1 bg-gray-800 text-gray-300 border-gray-700 text-xs"
-                          >
-                            {topic}
-                          </Badge>
-                        ))}
+                        {(question.topics || []).map(
+                          (topic: string, index: number) => (
+                            <Badge
+                              key={index}
+                              variant="secondary"
+                              className="px-2 py-1 bg-gray-800 text-gray-300 border-gray-700 text-xs"
+                            >
+                              {topic}
+                            </Badge>
+                          )
+                        )}
                         <Badge
                           className={`px-2 py-1 text-xs ${getDifficultyColor(
                             question.difficulty
@@ -840,17 +854,19 @@ const ProblemsPage: React.FC = () => {
                               <div className="text-xs font-medium text-gray-300 mb-2">
                                 Solved Timeline
                               </div>
-                              {question.solveHistory.map((date: number, index: number) => (
-                                <div
-                                  key={index}
-                                  className="flex items-center gap-2 text-sm"
-                                >
-                                  <div className="w-2 h-2 bg-green-500 rounded-full -ml-[5px]"></div>
-                                  <span className="text-gray-400">
-                                    Solved on {formatDate(date)}
-                                  </span>
-                                </div>
-                              ))}
+                              {question.solveHistory.map(
+                                (date: number, index: number) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-center gap-2 text-sm"
+                                  >
+                                    <div className="w-2 h-2 bg-green-500 rounded-full -ml-[5px]"></div>
+                                    <span className="text-gray-400">
+                                      Solved on {formatDate(date)}
+                                    </span>
+                                  </div>
+                                )
+                              )}
                             </div>
                           )}
                       </div>
@@ -862,12 +878,14 @@ const ProblemsPage: React.FC = () => {
                         variant="outline"
                         size="sm"
                         onClick={() =>
+                          !updating &&
                           updateQuestionField(
                             question.id,
                             "reviseLater",
                             !question.reviseLater
                           )
                         }
+                        disabled={updating === question.id}
                         className={`flex cursor-pointer items-center gap-2 ${
                           question.reviseLater
                             ? "bg-orange-900/30 border-orange-700/50 text-orange-400"
@@ -879,7 +897,9 @@ const ProblemsPage: React.FC = () => {
                             : "Mark for revision"
                         }
                       >
-                        {question?.reviseLater ? (
+                        {updating === question.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : question.reviseLater ? (
                           <BookMarked className="h-4 w-4" />
                         ) : (
                           <Bookmark className="h-4 w-4" />

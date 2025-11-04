@@ -37,10 +37,12 @@ export function NotesDialog({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
   const [editorText, setEditorText] = useState<string>("");
+  const [loadingNote, setLoadingNote] = useState(false);
 
   useEffect(() => {
     async function fetchNote() {
       try {
+        setLoadingNote(true);
         const result = await axios.get<ApiResponse<NoteResponse>>(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/notes/${selectedQuestion.noteId}`,
           { withCredentials: true }
@@ -65,6 +67,8 @@ export function NotesDialog({
         setEditorText(result.data.data.text);
       } catch (error) {
         console.error("Error fetching note:", error);
+      } finally {
+        setLoadingNote(false);
       }
     }
 
@@ -229,7 +233,15 @@ export function NotesDialog({
 
         {/* Content Area */}
         <div className="flex-1 overflow-hidden p-6">
-          {!isEditing ? (
+          {loadingNote ? (
+            // 🔄 Loader Section
+            <div className="h-full flex items-center justify-center">
+              <div className="flex flex-col items-center text-gray-400">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+                <p className="text-sm">Loading notes...</p>
+              </div>
+            </div>
+          ) : !isEditing ? (
             <div className="h-full">
               {note === undefined || !note.text.trim() ? (
                 <div className="h-full flex items-center justify-center">
