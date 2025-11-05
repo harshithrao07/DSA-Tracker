@@ -201,47 +201,22 @@ const ProblemsPage: React.FC = () => {
       description: "",
       onConfirm: () => {},
     });
+
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
-  const [infiniteLoading, setInfiniteLoading] = useState<boolean>(true);
+  const [infiniteLoading, setInfiniteLoading] = useState<boolean>(false); // start as false
   const [hasMore, setHasMore] = useState<boolean>(true);
-  const [updating, setUpdating] = useState<string | null>(null); // store questionId being updated
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [filtersVersion, setFiltersVersion] = useState<number>(0); // new trigger for filters
 
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    fetchQuestions();
-  }, [
-    page,
-    pageSize,
-    debouncedSearchTerm,
-    selectedTopics, // Updated dependency
-    selectedDifficulty,
-    selectedStatus,
-    sortBy,
-  ]);
-
-  useEffect(() => {
-    // whenever filters change, reset
-    setPage(0);
-    setHasMore(true);
-    setQuestions([]);
-    fetchQuestions();
-  }, [
-    debouncedSearchTerm,
-    selectedTopics, // Updated dependency
-    selectedDifficulty,
-    selectedStatus,
-    sortBy,
-  ]);
-
+  // Fetch topics once
   useEffect(() => {
     async function fetchTopics(): Promise<void> {
       try {
         const result = await axios.get<ApiResponse<Topic[]>>(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/topics`,
-          {
-            withCredentials: true,
-          }
+          { withCredentials: true }
         );
 
         if (!result.data.success) {
@@ -262,14 +237,39 @@ const ProblemsPage: React.FC = () => {
     fetchTopics();
   }, []);
 
+  // Reset and bump version when filters change
+  useEffect(() => {
+    setPage(0);
+    setHasMore(true);
+    setQuestions([]);
+    setFiltersVersion((v) => v + 1); // forces fetch
+  }, [
+    debouncedSearchTerm,
+    selectedTopics,
+    selectedDifficulty,
+    selectedStatus,
+    sortBy,
+  ]);
+
+  // Fetch whenever page or filtersVersion changes
+  useEffect(() => {
+    fetchQuestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, filtersVersion]);
+
+  // Intersection observer for infinite scroll
   useEffect(() => {
     if (!loaderRef.current) return;
 
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !infiniteLoading && hasMore) {
-        setPage((prev) => prev + 1);
-      }
-    });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !infiniteLoading && hasMore) {
+          console.log("🔹 Loading next page...");
+          setPage((prev) => prev + 1);
+        }
+      },
+      { root: null, rootMargin: "200px", threshold: 0 } // prefetch a bit earlier
+    );
 
     observer.observe(loaderRef.current);
 
@@ -278,8 +278,12 @@ const ProblemsPage: React.FC = () => {
     };
   }, [infiniteLoading, hasMore]);
 
+  // ✅ Fixed fetchQuestions
   async function fetchQuestions(): Promise<void> {
-    page !== 0 && setInfiniteLoading(true);
+    if (infiniteLoading) return; // avoid overlapping fetches
+
+    console.log("📦 Fetching page:", page);
+    setInfiniteLoading(true);
 
     try {
       let apiSortBy = sortBy;
@@ -305,7 +309,7 @@ const ProblemsPage: React.FC = () => {
         page: page.toString(),
         pageSize: pageSize.toString(),
         key: debouncedSearchTerm.trim(),
-        topics: selectedTopics.length === 0 ? "" : selectedTopics.join(","), // Join multiple topics
+        topics: selectedTopics.length === 0 ? "" : selectedTopics.join(","),
         difficulty: selectedDifficulty === "all" ? "" : selectedDifficulty,
         status: selectedStatus === "all" ? "" : selectedStatus,
         sortBy: apiSortBy,
@@ -320,21 +324,15 @@ const ProblemsPage: React.FC = () => {
       );
 
       if (!result.data.success) {
-        console.error(
-          "Error in fetching questions from server: ",
-          result.data.errorMessage
-        );
-
         toast({
           title: "Error",
           description: "Error in fetching questions",
           variant: "destructive",
         });
-
         return;
       }
 
-      const allQuestions = result.data.data.questionResponseDTOList;
+      const allQuestions = result.data.data.questionResponseDTOList || [];
 
       if (page === 0) {
         setStats({
@@ -343,7 +341,6 @@ const ProblemsPage: React.FC = () => {
           remQuestions: result.data.data.remQuestions,
         });
         setQuestions(allQuestions);
-        setHasMore(true);
       } else {
         setQuestions((prev) => {
           const merged = [...prev, ...allQuestions];
@@ -354,19 +351,22 @@ const ProblemsPage: React.FC = () => {
         });
       }
 
-      if (allQuestions.length < pageSize) {
+      // If fewer results than pageSize, no more pages
+      setHasMore(allQuestions.length >= pageSize);
+      if (allQuestions.length === 0 && page === 0) {
         setHasMore(false);
       }
-    } catch (error) {
-      console.error("Error in fetching questions from server: ", error);
 
+      console.log("✅ Fetch done, total questions:", allQuestions.length);
+    } catch (error) {
+      console.error("Error in fetching questions from server:", error);
       toast({
         title: "Error",
         description: "Error in fetching questions",
         variant: "destructive",
       });
-
-      setQuestions([]);
+      if (page === 0) setQuestions([]);
+      setHasMore(false);
     } finally {
       setInfiniteLoading(false);
     }
