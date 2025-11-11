@@ -32,6 +32,7 @@ import {
   History,
   X,
   Plus,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -58,6 +59,7 @@ export default function HomePage() {
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [selectedQuestion, setSelectedQuestion] =
     useState<QuestionResponse | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchTopics() {
@@ -227,6 +229,9 @@ export default function HomePage() {
     field: "solved" | "reviseLater",
     value: boolean
   ) => {
+    if (updating === questionId) return;
+    setUpdating(questionId);
+
     try {
       const result = await axios.put<ApiResponse<QuestionResponse>>(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/questions/${questionId}`,
@@ -288,6 +293,8 @@ export default function HomePage() {
         description: "Something went wrong updating the question",
         variant: "destructive",
       });
+    } finally {
+      setUpdating(null);
     }
   };
 
@@ -586,12 +593,14 @@ export default function HomePage() {
                       <div className="flex items-start gap-3">
                         <button
                           onClick={() =>
+                            !updating &&
                             updateQuestionField(
                               question.id,
                               "solved",
                               !question.solved
                             )
                           }
+                          disabled={updating === question.id}
                           className={cn(
                             "mt-1 cursor-pointer transition-colors",
                             question.solved
@@ -604,7 +613,9 @@ export default function HomePage() {
                               : "Mark as solved"
                           }
                         >
-                          {question.solved ? (
+                          {updating === question.id ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : question.solved ? (
                             <CheckCircle2 className="h-5 w-5" />
                           ) : (
                             <Circle className="h-5 w-5" />
@@ -742,12 +753,14 @@ export default function HomePage() {
                         variant="outline"
                         size="sm"
                         onClick={() =>
+                          !updating &&
                           updateQuestionField(
                             question.id,
                             "reviseLater",
                             !question.reviseLater
                           )
                         }
+                        disabled={updating === question.id}
                         className={cn(
                           "flex cursor-pointer items-center gap-2 transition-colors bg-background/40 backdrop-blur-sm border border-white/10 text-gray-300 hover:bg-white/10 hover:text-orange-400",
                           question.reviseLater &&
@@ -759,7 +772,9 @@ export default function HomePage() {
                             : "Mark for revision"
                         }
                       >
-                        {question?.reviseLater ? (
+                        {updating === question.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : question.reviseLater ? (
                           <BookMarked className="h-4 w-4" />
                         ) : (
                           <Bookmark className="h-4 w-4" />
