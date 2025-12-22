@@ -181,8 +181,8 @@ export default function ProfileHeatmap() {
 
                     {/* Heatmap Scroll Wrapper - Responsive with horizontal scroll */}
                     {activeYear != null && heatmapByYear[activeYear] && (
-                      <div className="overflow-x-auto overflow-y-visible pb-4 -mx-2 px-2">
-                        <div className="inline-block min-w-full">
+                      <div className="overflow-x-auto overflow-y-visible pb-4">
+                        <div style={{ width: 'max-content' }}>
                           <HeatMap
                             value={heatmapByYear[activeYear].map((d) => ({
                               date: d.date,
