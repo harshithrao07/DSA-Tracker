@@ -199,7 +199,7 @@ export default function ProfileHeatmap() {
                     <div style={{ width: "max-content", minWidth: "100%" }}>
                       <HeatMap
                         // FIX: maxWidth: 'none' ensures the SVG expands fully and doesn't squash
-                        style={{ color: "#dadada", maxWidth: "none", width: "880px" }}
+                        style={{ color: "#dadada", maxWidth: "none", width: "auto" }}
                         
                         value={heatmapByYear[activeYear].map((d) => ({
                           date: d.date,
@@ -207,13 +207,7 @@ export default function ProfileHeatmap() {
                         }))}
                         
                         startDate={new Date(Number(activeYear), 0, 1)}
-                        
-                        // FIX: Logic to handle current year vs past years correctly
-                        endDate={
-                          Number(activeYear) === new Date().getFullYear()
-                            ? new Date() // Today
-                            : new Date(Number(activeYear), 11, 31) // Dec 31
-                        }
+                        endDate={new Date(Number(activeYear), 11, 31)}
                         
                         rectSize={14}
                         space={4} // Slightly more space between squares for readability
