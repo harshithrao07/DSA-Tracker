@@ -82,16 +82,10 @@ export default function ProfileHeatmap() {
     try {
       const result = await axios.get<ApiResponse<boolean>>(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/user/reset-progress`,
-        {
-          withCredentials: true,
-        }
+        { withCredentials: true }
       );
 
       if (!result.data.success) {
-        console.error(
-          "Error resetting questions progress. ",
-          result.data.errorMessage
-        );
         toast({
           title: "Progress Reset",
           description: "Error resetting questions progress.",
@@ -100,16 +94,13 @@ export default function ProfileHeatmap() {
         return;
       }
 
-      if (result.data.data) {
-        toast({
-          title: "Progress Reset",
-          description: "All question progress has been reset successfully.",
-        });
+      toast({
+        title: "Progress Reset",
+        description: "All question progress has been reset successfully.",
+      });
 
-        refreshStats();
-      }
+      refreshStats();
     } catch (error) {
-      console.error("Error resetting questions progress. ", error);
       toast({
         title: "Progress Reset",
         description: "Error resetting questions progress.",
@@ -124,7 +115,7 @@ export default function ProfileHeatmap() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Profile Card */}
           <div className="lg:col-span-1 flex justify-center lg:justify-start">
-            <Card className="gradient-card glow-primary w-full max-w-xs transition-transform flex flex-col justify-center items-center" >
+            <Card className="gradient-card glow-primary w-full max-w-xs flex flex-col items-center">
               <CardHeader className="flex flex-col items-center text-center">
                 <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-primary mb-4">
                   <img
@@ -147,7 +138,7 @@ export default function ProfileHeatmap() {
                   variant="destructive"
                   size="sm"
                   onClick={handleResetProgress}
-                  className="glow-accent"
+                  className="mt-4"
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Reset Progress
@@ -158,7 +149,7 @@ export default function ProfileHeatmap() {
 
           {/* Heatmap Card */}
           <div className="lg:col-span-3">
-            <Card className="gradient-card glow-accent w-fulltransition-transform">
+            <Card className="gradient-card glow-accent w-full">
               <CardHeader>
                 <CardTitle className="text-xl font-semibold gradient-text-primary">
                   Heatmap Activity
@@ -167,9 +158,10 @@ export default function ProfileHeatmap() {
                   Your DSA activity over time
                 </CardDescription>
               </CardHeader>
+
               <CardContent>
                 {heatmapData.length > 0 ? (
-                  <div>
+                  <>
                     {/* Year Tabs */}
                     <div className="flex flex-wrap gap-2 mb-6">
                       {years.map((year) => (
@@ -177,7 +169,7 @@ export default function ProfileHeatmap() {
                           key={year}
                           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                             year === activeYear
-                              ? "bg-blue-600 text-white shadow-md"
+                              ? "bg-blue-600 text-white"
                               : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                           }`}
                           onClick={() => setActiveYear(year)}
@@ -187,71 +179,76 @@ export default function ProfileHeatmap() {
                       ))}
                     </div>
 
-                    {/* Heatmap */}
+                    {/* Heatmap Scroll Wrapper */}
                     {activeYear != null && heatmapByYear[activeYear] && (
-                      <HeatMap
-                        value={heatmapByYear[activeYear].map((d) => ({
-                          date: d.date,
-                          count: d.count,
-                        }))}
-                        width="100%"
-                        startDate={new Date(Number(activeYear), 0, 1)}
-                        endDate={
-                          Number(activeYear) === new Date().getFullYear()
-                            ? new Date()
-                            : new Date(Number(activeYear), 11, 31)
-                        }
-                        rectSize={14}
-                        weekLabels={[
-                          "Sun",
-                          "Mon",
-                          "Tue",
-                          "Wed",
-                          "Thu",
-                          "Fri",
-                          "Sat",
-                        ]}
-                        monthLabels={[
-                          "Jan",
-                          "Feb",
-                          "Mar",
-                          "Apr",
-                          "May",
-                          "Jun",
-                          "Jul",
-                          "Aug",
-                          "Sep",
-                          "Oct",
-                          "Nov",
-                          "Dec",
-                        ]}
-                        panelColors={{
-                          0: "#1f2937",
-                          2: "#22c55e",
-                          4: "#16a34a",
-                          6: "#15803d",
-                          8: "#166534",
-                        }}
-                        rectRender={(props, data) => {
-                          const date = new Date(data.date);
-                          const formatted = format(date, "MMM do, yyyy");
-                          return (
-                            <Tippy
-                              content={`${
-                                data.count ?? 0
-                              } activities on ${formatted}`}
-                              followCursor={true}
-                              placement="top"
-                            >
-                              <rect {...props} className="cursor-pointer" />
-                            </Tippy>
-                          );
-                        }}
-                      />
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[900px]">
+                          <HeatMap
+                            value={heatmapByYear[activeYear].map((d) => ({
+                              date: d.date,
+                              count: d.count,
+                            }))}
+                            startDate={new Date(Number(activeYear), 0, 1)}
+                            endDate={
+                              Number(activeYear) ===
+                              new Date().getFullYear()
+                                ? new Date()
+                                : new Date(Number(activeYear), 11, 31)
+                            }
+                            rectSize={14}
+                            weekLabels={[
+                              "Sun",
+                              "Mon",
+                              "Tue",
+                              "Wed",
+                              "Thu",
+                              "Fri",
+                              "Sat",
+                            ]}
+                            monthLabels={[
+                              "Jan",
+                              "Feb",
+                              "Mar",
+                              "Apr",
+                              "May",
+                              "Jun",
+                              "Jul",
+                              "Aug",
+                              "Sep",
+                              "Oct",
+                              "Nov",
+                              "Dec",
+                            ]}
+                            panelColors={{
+                              0: "#1f2937",
+                              2: "#22c55e",
+                              4: "#16a34a",
+                              6: "#15803d",
+                              8: "#166534",
+                            }}
+                            rectRender={(props, data) => {
+                              const formatted = format(
+                                new Date(data.date),
+                                "MMM do, yyyy"
+                              );
+                              return (
+                                <Tippy
+                                  content={`${data.count ?? 0} activities on ${formatted}`}
+                                >
+                                  <rect
+                                    {...props}
+                                    className="cursor-pointer"
+                                  />
+                                </Tippy>
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
                     )}
-                  </div>
+                  </>
                 ) : (
-                  <div className="flex justify-center items-center h-64 text-gray-400 text-lg">
+                  <div className="flex justify-center items-center h-64 text-gray-400">
                     No heatmap data available
                   </div>
                 )}
