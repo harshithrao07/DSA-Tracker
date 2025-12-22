@@ -182,61 +182,60 @@ export default function ProfileHeatmap() {
                     {/* Heatmap Scroll Wrapper */}
                     {activeYear != null && heatmapByYear[activeYear] && (
                       <div className="overflow-x-auto">
-                        <div className="min-w-[900px]">
-                          <HeatMap
-                            value={heatmapByYear[activeYear].map((d) => ({
-                              date: d.date,
-                              count: d.count,
-                            }))}
-                            startDate={new Date(Number(activeYear), 0, 1)}
-                            rectSize={14}
-                            weekLabels={[
-                              "Sun",
-                              "Mon",
-                              "Tue",
-                              "Wed",
-                              "Thu",
-                              "Fri",
-                              "Sat",
-                            ]}
-                            monthLabels={[
-                              "Jan",
-                              "Feb",
-                              "Mar",
-                              "Apr",
-                              "May",
-                              "Jun",
-                              "Jul",
-                              "Aug",
-                              "Sep",
-                              "Oct",
-                              "Nov",
-                              "Dec",
-                            ]}
-                            panelColors={{
-                              0: "#1f2937",
-                              2: "#22c55e",
-                              4: "#16a34a",
-                              6: "#15803d",
-                              8: "#166534",
-                            }}
-                            rectRender={(props, data) => {
-                              const formatted = format(
-                                new Date(data.date),
-                                "MMM do, yyyy"
-                              );
-                              return (
-                                <Tippy
-                                  content={`${
-                                    data.count ?? 0
-                                  } activities on ${formatted}`}
-                                >
-                                  <rect {...props} className="cursor-pointer" />
-                                </Tippy>
-                              );
-                            }}
-                          />
-                        </div>
+                        <HeatMap
+                          value={heatmapByYear[activeYear].map((d) => ({
+                            date: d.date,
+                            count: d.count,
+                          }))}
+                          startDate={new Date(Number(activeYear), 0, 1)}
+                          rectSize={14}
+                          width={600}
+                          weekLabels={[
+                            "Sun",
+                            "Mon",
+                            "Tue",
+                            "Wed",
+                            "Thu",
+                            "Fri",
+                            "Sat",
+                          ]}
+                          monthLabels={[
+                            "Jan",
+                            "Feb",
+                            "Mar",
+                            "Apr",
+                            "May",
+                            "Jun",
+                            "Jul",
+                            "Aug",
+                            "Sep",
+                            "Oct",
+                            "Nov",
+                            "Dec",
+                          ]}
+                          panelColors={{
+                            0: "#1f2937",
+                            2: "#22c55e",
+                            4: "#16a34a",
+                            6: "#15803d",
+                            8: "#166534",
+                          }}
+                          rectRender={(props, data) => {
+                            const formatted = format(
+                              new Date(data.date),
+                              "MMM do, yyyy"
+                            );
+                            return (
+                              <Tippy
+                                content={`${
+                                  data.count ?? 0
+                                } activities on ${formatted}`}
+                              >
+                                <rect {...props} className="cursor-pointer" />
+                              </Tippy>
+                            );
+                          }}
+                        />
                       </div>
                     )}
                   </>
