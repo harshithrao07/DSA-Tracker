@@ -188,8 +188,12 @@ export default function ProfileHeatmap() {
                             count: d.count,
                           }))}
                           startDate={new Date(Number(activeYear), 0, 1)}
+                          endDate={
+                            Number(activeYear) === new Date().getFullYear()
+                              ? new Date()
+                              : new Date(Number(activeYear), 11, 31)
+                          }
                           rectSize={14}
-                          width={1000}
                           weekLabels={[
                             "Sun",
                             "Mon",
