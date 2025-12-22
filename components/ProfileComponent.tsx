@@ -179,22 +179,25 @@ export default function ProfileHeatmap() {
                       ))}
                     </div>
 
-                    {/* Heatmap Scroll Wrapper - Responsive with horizontal scroll */}
+                    {/* Heatmap Scroll Wrapper */}
                     {activeYear != null && heatmapByYear[activeYear] && (
-                      <div className="overflow-x-auto overflow-y-visible pb-4">
-                        <div style={{ width: 'max-content' }}>
+                      <div className="w-full overflow-x-auto pb-4">
+                        <div style={{ width: "max-content" }}>
                           <HeatMap
+                            // 1. CRITICAL FIX: Add maxWidth: 'none' to prevent Tailwind from squishing the SVG
+                            style={{ color: "#dadada", maxWidth: "none" }}
                             value={heatmapByYear[activeYear].map((d) => ({
                               date: d.date,
                               count: d.count,
                             }))}
                             startDate={new Date(Number(activeYear), 0, 1)}
+                            // 2. Logic to show till "Today" for current year, or Dec 31 for past years
                             endDate={
-                              Number(activeYear) ===
-                              new Date().getFullYear()
+                              Number(activeYear) === new Date().getFullYear()
                                 ? new Date()
                                 : new Date(Number(activeYear), 11, 31)
                             }
+                            width={800} // Optional: Helps establish base size before JS loads
                             rectSize={14}
                             weekLabels={[
                               "Sun",
@@ -227,18 +230,18 @@ export default function ProfileHeatmap() {
                               8: "#166534",
                             }}
                             rectRender={(props, data) => {
+                              if (!data.date) return <rect {...props} />;
                               const formatted = format(
                                 new Date(data.date),
                                 "MMM do, yyyy"
                               );
                               return (
                                 <Tippy
-                                  content={`${data.count ?? 0} activities on ${formatted}`}
+                                  content={`${
+                                    data.count ?? 0
+                                  } activities on ${formatted}`}
                                 >
-                                  <rect
-                                    {...props}
-                                    className="cursor-pointer"
-                                  />
+                                  <rect {...props} className="cursor-pointer" />
                                 </Tippy>
                               );
                             }}
