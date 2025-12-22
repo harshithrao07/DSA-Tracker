@@ -138,7 +138,6 @@ export default function ProfileHeatmap() {
                 {user.name}
               </h2>
               <div className="flex items-center justify-center md:justify-start text-gray-400 gap-2">
-                <Mail className="w-4 h-4" />
                 <span>{user.email}</span>
               </div>
             </div>
@@ -200,7 +199,7 @@ export default function ProfileHeatmap() {
                     <div style={{ width: "max-content", minWidth: "100%" }}>
                       <HeatMap
                         // FIX: maxWidth: 'none' ensures the SVG expands fully and doesn't squash
-                        style={{ color: "#dadada", maxWidth: "none" }}
+                        style={{ color: "#dadada", maxWidth: "none", width: "880px" }}
                         
                         value={heatmapByYear[activeYear].map((d) => ({
                           date: d.date,
