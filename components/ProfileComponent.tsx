@@ -189,7 +189,7 @@ export default function ProfileHeatmap() {
                           }))}
                           startDate={new Date(Number(activeYear), 0, 1)}
                           rectSize={14}
-                          width={600}
+                          width={1000}
                           weekLabels={[
                             "Sun",
                             "Mon",
